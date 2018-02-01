@@ -18,10 +18,12 @@ packages <- c("ggplot2", "car", "plyr", "tidyr")
 ipak(packages)
 
 
-dataDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceData/"
-figDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFLowerChoiceFigures/"
 
+# dataDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceData/"
+# figDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFLowerChoiceFigures/"
 
+dataDir = "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceData"
+figDir= "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFLowerChoiceFigures"
 
 
 
@@ -89,5 +91,5 @@ sw3$colonyNum = sapply(sw3$newDF.ID, FUN = function(x) newDF[newDF$ID == x, "col
 
 
 # now we're ready for binomial regression
-sw3
+write.csv(sw3, file = file.path(figDir, "prelimData.csv"))
 ```
