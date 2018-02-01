@@ -1,0 +1,87 @@
+---
+title: "Analysis for reward vs no reward pollen choice experiments"
+output: html_notebook
+---
+
+
+
+```{r, setup}
+ipak <- function(pkg){
+  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+  if(length(new.pkg)) install.packages(new.pkg, dependencies = TRUE)
+  sapply(pkg, require, character.only = TRUE)
+}
+  
+packages <- c("ggplot2", "car", "plyr", "tidyr")
+ipak(packages)
+
+
+dataDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceData/"
+figDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFLowerChoiceFigures/"
+
+
+
+
+
+```
+
+
+
+```{r}
+# load in data
+csvList = list.files(dataDir)
+
+
+for (ii in csvList){
+ 
+  
+   tmp = read.csv(file.path(dataDir, ii), stringsAsFactors = FALSE)
+  
+   tmp$ID = ii
+   
+   if(ii == csvList[1]) newDF = tmp
+   else newDF = rbind(tmp, newDF)
+}  
+
+```
+
+
+```{r}
+newDF$rewardStatus = tolower(newDF$rewardStatus)
+
+unique(newDF$rewardStatus)
+
+
+summaryDF = as.data.frame(xtabs(~newDF$ID + newDF$rewardStatus + newDF$accNum))
+
+summaryDF
+
+# convert to wide format
+
+
+summary_wide = spread(summaryDF,   newDF.accNum, Freq)
+summary_wide2 = spread(summaryDF,   newDF.rewardStatus, Freq)
+
+# insert treatment
+summary_wide$treatment = sapply(summary_wide$newDF.ID, FUN = function(x) newDF[newDF$ID == x, "treatment"][1])
+
+
+summary_wide
+
+# remove rows where both rewarded the bee
+summary_wide = summary_wide[summary_wide$treatment != "Dev2/ai0_True__Dev2/ai1_True", ]
+summary_wide
+
+# make sure at one column is 0
+summary_wide$`Dev2/ai0` ==0 | summary_wide$`Dev2/ai1` == 0
+
+# combine to make a visit column
+summary_wide$visits = summary_wide$`Dev2/ai0` + summary_wide$`Dev2/ai1`
+
+# make wide
+sw3 = spread(summary_wide[, c("newDF.ID", "newDF.rewardStatus", "visits", "treatment")],   newDF.rewardStatus, visits)
+sw3
+
+# now we're ready for binomial regression
+
+```
