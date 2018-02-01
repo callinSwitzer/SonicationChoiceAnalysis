@@ -92,4 +92,10 @@ sw3$colonyNum = sapply(sw3$newDF.ID, FUN = function(x) newDF[newDF$ID == x, "col
 
 # now we're ready for binomial regression
 write.csv(sw3, file = file.path(figDir, "prelimData.csv"))
+
+sw3$prop = sw3$true / (sw3$true + sw3$false)
+
+ggplot(sw3, aes(x = newDF.ID, y = prop)) + 
+  geom_bar(stat = "identity") +
+  
 ```
