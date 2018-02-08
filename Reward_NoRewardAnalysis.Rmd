@@ -23,7 +23,7 @@ ipak(packages)
 # figDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFLowerChoiceFigures/"
 
 dataDir = "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceData"
-figDir= "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFLowerChoiceFigures"
+figDir= "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceFigures"
 
 
 
@@ -88,6 +88,7 @@ sw3
 
 # refref: add hive humber
 sw3$colonyNum = sapply(sw3$newDF.ID, FUN = function(x) newDF[newDF$ID == x, "colonyNum"][1])
+sw3$IT = sapply(sw3$newDF.ID, FUN = function(x) newDF[newDF$ID == x, "ITSpan_mm"][1])
 
 
 # now we're ready for binomial regression
@@ -100,4 +101,80 @@ ggplot(sw3, aes(x = newDF.ID, y = prop)) +
   geom_hline(aes(yintercept = 0.5), lty = 2) + 
   theme_classic()
   
+```
+
+
+## GLM
+
+```{r}
+library(lme4)
+sw4 <- sw3
+
+# model might be overdispersed
+# sw4$true = sw4$true + 1
+# sw4$false = sw4$false + 1
+
+
+m1 <- glmer(cbind(true, false)~ (1|`newDF.ID`), family = binomial("logit"), data = sw4)
+summary(m1)
+
+# evaluate fit
+library("blmeco") 
+dispersion_glmer(m1) #if the scale paramter is between 0.75 and 1.4, there may not be an overdispersion problem.
+
+qqnorm(ranef(m1)$`newDF.ID`[,1])
+qqline(ranef(m1)$`newDF.ID`[,1])
+
+plot(fitted(m1), resid(m1)) #residuals vs fitted
+abline(h=0)
+
+# bad at predicting low and high
+sw4$fitted <- predict(m1, type = "response") #fitted vs observed
+plot(sw4$fitted, sw4$prop)
+abline(0,1)
+
+
+pframe <- data.frame(`newDF.ID` = 99999)
+pframe$prob <- 0
+pp <- predict(m1, newdata = pframe, re.form=NA, type = 'response') # re.form sets all random effects to 0
+
+bm = bootMer(m1, FUN=function(x){
+                        predict(x, 
+                                pframe, 
+                                re.form=NA, 
+                                type = 'response')
+                        }, 
+             nsim = 1000)
+
+bb2_se <-apply(bm$t,2,function(x) quantile(x, probs = c(0.025, 0.975)))
+pframe$blo<-bb2_se[1,]
+pframe$bhi<-bb2_se[2,]
+pframe$predMean <- pp
+pframe <- pframe[, c("blo", "bhi", "predMean")]
+pframe
+
+
+ggplot(pframe, aes(x = 1, y = predMean)) + 
+  geom_point() + 
+  geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1)  + 
+  theme_classic() + 
+  xlim(0.5,1.5) + 
+  xlab("") + 
+  ylab("predicted proportion of visits to rewarding flower") + 
+  ylim(0,1) + 
+  geom_hline(aes(yintercept = 0.5), lty = 2, col = 'red') + 
+  theme(axis.ticks.x = element_blank(), 
+        axis.text.x = element_blank(), 
+        axis.line.x = element_blank())
+
+ggsave(file.path(figDir, "propSuccessPollen_early.pdf"), width = 2, height = 4)
+
+colSums(sw3[, 3:4])[2] / sum(colSums(sw3[, 3:4]))
+
+
+# diagnostics
+plot(m1)
+
+plot(ranef(m1))
+
 ```
