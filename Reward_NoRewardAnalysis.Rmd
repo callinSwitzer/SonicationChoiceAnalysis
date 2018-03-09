@@ -176,3 +176,94 @@ plot(m1)
 plot(ranef(m1))
 
 ```
+
+
+```{r}
+# plot rolling mean
+index = numeric()
+for(ii in 1:nrow(newDF)){
+  if(ii == 1) tmpID_old = "9999999"
+  tmpID_new = newDF$ID[ii]
+  if(tmpID_new != tmpID_old){
+    ctr = 1
+  }
+  else ctr = ctr + 1
+  index[ii] = ctr
+  tmpID_old = tmpID_new
+}
+
+newDF$index = index
+
+
+
+binomial_smooth <- function(...) {
+  geom_smooth(method = "glm", method.args = list(family = "binomial"), se = FALSE, ...)
+}
+
+newDF2 <- newDF[newDF$index <= 100, ]
+
+
+newDF2$propIndex = newDF2$index 
+for(ii in 1:nrow(newDF2)){
+  newDF2$propIndex[ii] = newDF2$index[ii] / sum(newDF2$ID == newDF2$ID[ii])
+}
+
+newDF2$propIndex
+
+
+
+
+ggplot(newDF2, aes(x = propIndex, y = logicalReward)) + 
+  geom_point(position = position_jitter(height = 0.1), size = 0.5) +
+  binomial_smooth()+  
+  geom_line(alpha = 0.2) + 
+  facet_wrap(~ID) + 
+  theme_classic() + 
+  xlab("Buzz number")+
+  ylab("Reward (1: True, 0: False)")+
+  theme(
+  strip.background = element_blank(),
+  strip.text.x = element_blank(), 
+  axis.text.x = element_blank(), 
+  panel.border = element_rect(colour = "black", fill=NA, size=0.7)
+)
+ggsave(file.path(figDir, "BeeChangeOverTime.pdf"), width = 10, height = 6)
+
+ggplot(newDF2[, ], aes(x = index, y = logicalReward)) + 
+  geom_point(position = position_jitter(height = 0.1), size = 0.5) +
+  binomial_smooth()+  
+  geom_line(alpha = 0.2) + 
+  facet_wrap(~ID) + 
+  theme_classic() + 
+  xlab("Buzz number")+
+  ylab("Reward (1: True, 0: False)")+
+  theme(
+  strip.background = element_blank(),
+  strip.text.x = element_blank(), 
+  axis.text.x = element_blank(), 
+  panel.border = element_rect(colour = "black", fill=NA, size=0.7)
+)
+
+ggsave(file.path(figDir, "BeeChangeOverTime_notScaled.pdf"), width = 10, height = 6)
+
+
+m1 = glmer(logicalReward ~ index + (1|ID), family = binomial("logit"), data = newDF)
+summary(m1)
+
+preds = predict(m1, newdata = data.frame(index = 1:100, ID = "9999"), type = 'response', re.form = NA, se = TRUE)
+
+pdframe = data.frame(preds)
+pdframe$visitNum = 1:100
+
+ggplot(pdframe, aes(x = visitNum , y = fit)) + 
+  geom_ribbon(aes(ymin = fit - 2*se.fit, ymax = fit + 2*se.fit), alpha = 0.3) + 
+  geom_line() + 
+  theme_classic() + 
+  labs(x = "Visit number", y= 'Predicted probability of\nvisiting rewarding flower')
+ggsave(file.path(figDir, "BeeChangeOverallPreds.pdf"), width = 5, height = 3.5)
+
+
+plot(preds$fit)
+lines(preds$fit + 2*preds$se.fit)
+
+```
