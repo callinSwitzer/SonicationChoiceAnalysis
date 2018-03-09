@@ -263,7 +263,4 @@ ggplot(pdframe, aes(x = visitNum , y = fit)) +
 ggsave(file.path(figDir, "BeeChangeOverallPreds.pdf"), width = 5, height = 3.5)
 
 
-plot(preds$fit)
-lines(preds$fit + 2*preds$se.fit)
-
 ```
