@@ -210,8 +210,11 @@ for(ii in 1:nrow(newDF2)){
 
 newDF2$propIndex
 
+newDF2$logicalReward = as.numeric(newDF2$rewardStatus == "true")
 
+library(magrittr)
 
+newDF2 %>% head
 
 ggplot(newDF2, aes(x = propIndex, y = logicalReward)) + 
   geom_point(position = position_jitter(height = 0.1), size = 0.5) +
@@ -245,9 +248,84 @@ ggplot(newDF2[, ], aes(x = index, y = logicalReward)) +
 )
 
 ggsave(file.path(figDir, "BeeChangeOverTime_notScaled.pdf"), width = 10, height = 6)
+```
 
 
-m1 = glmer(logicalReward ~ index + (1|ID), family = binomial("logit"), data = newDF)
+
+```{r}
+# visit time
+
+newDF2 %>% head
+
+# convert visit time to a timestamp
+
+ttms = newDF2$timestamp %>% as.POSIXct(format="%Y_%m_%d__%H_%M_%OS")
+
+
+# calculate time differences, based on timestamps
+id = newDF2$ID[200]
+
+timeDiffF = function(id){
+  tmp = newDF2[newDF2$ID == id, ]
+  
+  tmsReformat = paste(substr(tmp$timestamp, 1, 20), substr(tmp$timestamp, 22, 999), sep = ".")
+  
+  ttms = tmsReformat %>% as.POSIXct(format="%Y_%m_%d__%H_%M_%OS")
+  
+  diffTms = as.numeric(ttms)
+  
+  for(jj in 1:nrow(tmp)){
+    diffTms[jj] <- as.numeric(difftime(ttms[jj], ttms[1], units = "min"))
+  }
+  
+  return(diffTms)
+  
+}
+options(digits.mins = 3)
+
+timeDiffs = sapply(unique(newDF2$ID), FUN = function(x) timeDiffF(x))
+dd1  = as.data.frame(unlist(timeDiffs))
+dd1$ID = paste0(sapply(rownames(dd1), function(x) strsplit(x, ".csv")[[1]][1]), ".csv")
+dd1$index = sapply(rownames(dd1), function(x) strsplit(x, ".csv")[[1]][2]) %>% as.numeric
+
+colnames(dd1)[1] = "TimeSinceStart"
+dd1 %>% head
+
+
+#merge
+newDF2 %>% head
+
+ndf3 <- merge(newDF2, dd1)
+
+ndf3 %>% head
+
+
+
+# plot
+
+ggplot(ndf3[, ], aes(x = TimeSinceStart, y = logicalReward)) + 
+  geom_point(position = position_jitter(height = 0.1), size = 0.5) +
+  binomial_smooth(color = 'red')+  
+  geom_line(alpha = 0.2) + 
+  facet_wrap(~ID) + 
+  theme_classic() + 
+  xlab("Time since first buzz (min)")+
+  ylab("Reward (1: True, 0: False)")+
+  theme(
+  strip.background = element_blank(),
+  strip.text.x = element_blank(), 
+  #axis.text.x = element_blank(), 
+  panel.border = element_rect(colour = "black", fill=NA, size=0.7)
+)
+
+ggsave(file.path(figDir, "BeeChangeOverTime_min.pdf"), width = 10, height = 6)
+
+```
+
+
+```{r}
+
+m1 = glmer(logicalReward ~ index + (1|ID), family = binomial("logit"), data = newDF2)
 summary(m1)
 
 preds = predict(m1, newdata = data.frame(index = 1:100, ID = "9999"), type = 'response', re.form = NA, se = TRUE)
@@ -262,5 +340,38 @@ ggplot(pdframe, aes(x = visitNum , y = fit)) +
   labs(x = "Visit number", y= 'Predicted probability of\nvisiting rewarding flower')
 ggsave(file.path(figDir, "BeeChangeOverallPreds.pdf"), width = 5, height = 3.5)
 
+
+```
+
+# markov chain
+
+```{r}
+x <- newDF2$logicalReward
+xChar<-as.character(x)
+
+library(markovchain)
+mcX<-markovchainFit(xChar)$estimate
+mcX
+plot(mcX)
+
+
+sequenceMatr <- createSequenceMatrix(x, sanitize = FALSE)
+mcFitMLE <- markovchainFit(data = x)
+mcFitBSP <- markovchainFit(data = x, method = "bootstrap", nboot = 5, name = "Bootstrap Mc")
+
+
+# make list
+myList<-list()
+for (i in 1:length(unique(newDF2$ID))) {
+  myList[[i]]<-as.character(newDF2$logicalReward[newDF2$ID == unique(newDF2$ID)[i]])
+}
+
+singleMcFromList<-markovchainFit(data=myList,name="listFit") #fit the MC
+singleMcFromList
+
+set.seed(123)
+pdf(file.path(figDir, "BeeMarkovChain.pdf"), width = 8, height = 6)
+plot(singleMcFromList$estimate)
+dev.off()
 
 ```
