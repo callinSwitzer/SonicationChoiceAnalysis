@@ -84,6 +84,8 @@ for(ii in 1:nrow(newDF)){
 }
 
 newDF$index = index
+# save newDF
+# write.csv(newDF, file = file.path(dataDir, "buzzingChoiceData_30May2018.csv"))
 
 
 
@@ -170,11 +172,11 @@ BernTrials = ndf3[ndf3$ID == unique(ndf3$ID)[9], "logicalReward"]
 x = seq(0,1, length.out = 1000)
 # shape 1 = a, shape 2 = b
 # prior for first flower
-a1 = 1
-b1 = 1
+a1 = 1.5
+b1 = 1.5
 # prior for second flower
-a2 = 1
-b2 = 1
+a2 = 1.5
+b2 = 1.5
 
 # update prior after one trial
 ii = 1
@@ -203,7 +205,7 @@ ii = ii + 1
 dens = dbeta(x, shape1 = a1, shape2 = b1)
 dens2 = dbeta(x, shape1 = a2, shape2 = b2)
 
-plot(x = x, y = dens, type = "l", col = 'red', ylim = c(0,max(c(dens, dens2))), ylab = "f(x)")
+plot(x = x, y = dens, type = "l", col = 'red', ylim = c(0,max(c(dens, dens2))), ylab = "f(x)", bty = 'l')
 lines(x = x, y = dens2, col = 'blue')
 
 # shade 95% quantiles
