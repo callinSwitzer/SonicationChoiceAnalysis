@@ -19,11 +19,12 @@ ipak(packages)
 
 
 
-# dataDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceData/"
-# figDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFLowerChoiceFigures/"
 
-dataDir = "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceData"
-figDir= "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceFigures"
+dataDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceData/"
+figDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFLowerChoiceFigures/"
+
+#dataDir = "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceData"
+#figDir= "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceFigures"
 
 
 
@@ -33,19 +34,22 @@ figDir= "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceFigures"
 
 ```{r}
 # load in data
-csvList = list.files(dataDir)
+csvList =  list.files(dataDir)
 
 
 for (ii in csvList){
  
   
    tmp = read.csv(file.path(dataDir, ii), stringsAsFactors = FALSE)
-  
+
    tmp$ID = ii
    
    if(ii == csvList[1]) newDF = tmp
    else newDF = rbind(tmp, newDF)
 }  
+
+# clean data
+newDF$Notes
 
 ```
 
