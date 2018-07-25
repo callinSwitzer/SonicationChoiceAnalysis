@@ -19,16 +19,20 @@ ipak(packages)
 
 
 
+# windows
+#dataDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceData/"
+#figDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFLowerChoiceFigures/"
 
-dataDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceData/"
-figDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFLowerChoiceFigures/"
-
-#dataDir = "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceData"
-#figDir= "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceFigures"
+# mac
+dataDir = "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceData"
+figDir= "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceFigures"
 
 
 
 ```
+
+
+
 
 
 
@@ -49,32 +53,53 @@ for (ii in csvList){
 }  
 
 # clean data
-newDF$Notes
+newDF <- newDF[-grep("discard", tolower(newDF$Notes)), ]
+row.names(newDF) = 1:nrow(newDF) # renumber row names
+newDF$Notes[is.na(newDF$Notes)] <- ""
+
+
+# discard
+unique(newDF$Notes)
+
+
+## label bees that don't pack pollen
+newDF$packedPollen <- !(row.names(newDF) %in% grep(pattern = "corbic", tolower(newDF$Notes))) 
+
+unique(newDF$Notes[newDF$packedPollen])
+
+# comment out to show all bees
+# newDF <- newDF3
+
+
 
 ```
 
 
 ```{r}
+
+newDF <- droplevels(newDF)
+row.names(newDF) <- 1:nrow(newDF)
 newDF$rewardStatus = tolower(newDF$rewardStatus)
 
 unique(newDF$rewardStatus)
 
 
-summaryDF = as.data.frame(xtabs(~newDF$ID + newDF$rewardStatus + newDF$accNum))
+summaryDF = as.data.frame(with(newDF, xtabs(~ID + rewardStatus + accNum + packedPollen)))
 
 summaryDF
 
 # convert to wide format
-
-
-summary_wide = spread(summaryDF,   newDF.accNum, Freq)
-summary_wide2 = spread(summaryDF,   newDF.rewardStatus, Freq)
+summary_wide = spread(summaryDF,   accNum, Freq)
+summary_wide2 = spread(summaryDF,   rewardStatus, Freq)
 
 # insert treatment
-summary_wide$treatment = sapply(summary_wide$newDF.ID, FUN = function(x) newDF[newDF$ID == x, "treatment"][1])
+summary_wide$treatment = sapply(summary_wide$ID, FUN = function(x) newDF[newDF$ID == x, "treatment"][1])
 
 
 summary_wide
+
+# remove rows where both rewards are 0
+summary_wide = summary_wide[!((summary_wide$`Dev2/ai0` == 0) & (summary_wide$`Dev2/ai1` == 0)), ]
 
 # remove rows where both rewarded the bee
 summary_wide = summary_wide[summary_wide$treatment != "Dev2/ai0_True__Dev2/ai1_True", ]
@@ -87,12 +112,15 @@ summary_wide$`Dev2/ai0` ==0 | summary_wide$`Dev2/ai1` == 0
 summary_wide$visits = summary_wide$`Dev2/ai0` + summary_wide$`Dev2/ai1`
 
 # make wide
-sw3 = spread(summary_wide[, c("newDF.ID", "newDF.rewardStatus", "visits", "treatment")],   newDF.rewardStatus, visits)
-sw3
+sw3 = spread(summary_wide[, c("ID", "rewardStatus", "visits", "treatment", "packedPollen")],   rewardStatus, visits)
+
+# replace NA with 0
+sw3$false[is.na(sw3$false)] = 0
+sw3$true[is.na(sw3$true)] = 0
 
 # refref: add hive humber
-sw3$colonyNum = sapply(sw3$newDF.ID, FUN = function(x) newDF[newDF$ID == x, "colonyNum"][1])
-sw3$IT = sapply(sw3$newDF.ID, FUN = function(x) newDF[newDF$ID == x, "ITSpan_mm"][1])
+sw3$colonyNum = sapply(sw3$ID, FUN = function(x) newDF[newDF$ID == x, "colonyNum"][1])
+sw3$IT = sapply(sw3$ID, FUN = function(x) newDF[newDF$ID == x, "ITSpan_mm"][1])
 
 
 # now we're ready for binomial regression
@@ -101,10 +129,12 @@ write.csv(sw3, file = file.path(figDir, "prelimData.csv"))
 
 
 
-ggplot(sw3, aes(x = newDF.ID, y = prop)) + 
+ggplot(sw3, aes(x = substr(ID, start = 0, stop = 17), y = prop-0.005, fill = packedPollen)) + 
   geom_bar(stat = "identity") + 
   geom_hline(aes(yintercept = 0.5), lty = 2) + 
-  theme_classic()
+  theme_classic()+ 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) + 
+  xlab("Timestamp")
   
 ```
 
@@ -115,17 +145,16 @@ ggplot(sw3, aes(x = newDF.ID, y = prop)) +
 library(lme4)
 sw4 <- sw3
 
-
-m1 <- glmer(cbind(true, false)~ (1|`newDF.ID`), family = binomial("logit"), data = sw4)
+# bias reduced GLM
+m1 <- glmer(cbind(true, false)~ packedPollen + (1|ID), family = binomial("probit"), data = sw4)
 summary(m1)
 
 
 # evaluate fit
-library("blmeco") 
 dispersion_glmer(m1) #if the scale paramter is between 0.75 and 1.4, there may not be an overdispersion problem.
 
-qqnorm(ranef(m1)$`newDF.ID`[,1])
-qqline(ranef(m1)$`newDF.ID`[,1])
+qqnorm(ranef(m1)$ID[,1])
+qqline(ranef(m1)$ID[,1])
 
 plot(fitted(m1), resid(m1)) #residuals vs fitted
 abline(h=0)
@@ -136,7 +165,7 @@ plot(sw4$fitted, sw4$prop)
 abline(0,1)
 
 
-pframe <- data.frame(`newDF.ID` = 99999)
+pframe <- data.frame(ID = 99999, packedPollen = c(TRUE, FALSE))
 pframe$prob <- 0
 pp <- predict(m1, newdata = pframe, re.form=NA, type = 'response') # re.form sets all random effects to 0
 
@@ -146,30 +175,26 @@ bm = bootMer(m1, FUN=function(x){
                                 re.form=NA, 
                                 type = 'response')
                         }, 
-             nsim = 1000)
+             nsim = 100)
 
 bb2_se <-apply(bm$t,2,function(x) quantile(x, probs = c(0.025, 0.975)))
 pframe$blo<-bb2_se[1,]
 pframe$bhi<-bb2_se[2,]
 pframe$predMean <- pp
-pframe <- pframe[, c("blo", "bhi", "predMean")]
+pframe <- pframe[, c("packedPollen", "blo", "bhi", "predMean")]
 pframe
 
 
-ggplot(pframe, aes(x = 1, y = predMean)) + 
+ggplot(pframe, aes(x = packedPollen, y = predMean)) + 
   geom_point() + 
   geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1)  + 
   theme_classic() + 
-  xlim(0.5,1.5) + 
-  xlab("") + 
+  xlab("Packed Pollen") + 
   ylab("predicted proportion of visits to rewarding flower") + 
   ylim(0,1) + 
-  geom_hline(aes(yintercept = 0.5), lty = 2, col = 'red') + 
-  theme(axis.ticks.x = element_blank(), 
-        axis.text.x = element_blank(), 
-        axis.line.x = element_blank())
+  geom_hline(aes(yintercept = 0.5), lty = 2, col = 'red') 
 
-ggsave(file.path(figDir, "propSuccessPollen_1Mar.pdf"), width = 2, height = 4)
+ggsave(file.path(figDir, "propSuccessPollen_25July.pdf"), width = 2, height = 4)
 
 colSums(sw3[, 3:4])[2] / sum(colSums(sw3[, 3:4]))
 
@@ -216,11 +241,27 @@ newDF2$propIndex
 
 newDF2$logicalReward = as.numeric(newDF2$rewardStatus == "true")
 
-library(magrittr)
 
 newDF2 %>% head
 
+
+
 ggplot(newDF2, aes(x = propIndex, y = logicalReward)) + 
+  geom_point(position = position_jitter(height = 0.1), size = 0.5) +
+  binomial_smooth(aes(color = packedPollen))+  
+  geom_line(alpha = 0.2) + 
+  facet_wrap(~ID) + 
+  theme_classic() + 
+  xlab("Buzz number")+
+  ylab("Reward (1: True, 0: False)")+
+  theme(
+  strip.background = element_blank(),
+  strip.text.x = element_blank(), 
+  axis.text.x = element_blank(), 
+  panel.border = element_rect(colour = "black", fill=NA, size=0.7)
+)
+
+ggplot(newDF3, aes(x = propIndex, y = logicalReward)) + 
   geom_point(position = position_jitter(height = 0.1), size = 0.5) +
   binomial_smooth()+  
   geom_line(alpha = 0.2) + 
@@ -234,6 +275,7 @@ ggplot(newDF2, aes(x = propIndex, y = logicalReward)) +
   axis.text.x = element_blank(), 
   panel.border = element_rect(colour = "black", fill=NA, size=0.7)
 )
+
 ggsave(file.path(figDir, "BeeChangeOverTime.pdf"), width = 10, height = 6)
 
 ggplot(newDF2[, ], aes(x = index, y = logicalReward)) + 
