@@ -14,7 +14,7 @@ ipak <- function(pkg){
   sapply(pkg, require, character.only = TRUE)
 }
   
-packages <- c("ggplot2", "car", "plyr", "tidyr")
+packages <- c("ggplot2", "car", "plyr", "tidyr", "blmeco")
 ipak(packages)
 
 
@@ -54,6 +54,8 @@ for (ii in csvList){
 
 # clean data
 newDF <- newDF[-grep("discard", tolower(newDF$Notes)), ]
+# remove double reward group
+newDF <- newDF[newDF$treatment != "Dev2/ai0_True__Dev2/ai1_True", ]
 row.names(newDF) = 1:nrow(newDF) # renumber row names
 newDF$Notes[is.na(newDF$Notes)] <- ""
 
@@ -70,19 +72,19 @@ unique(newDF$Notes[newDF$packedPollen])
 # comment out to show all bees
 # newDF <- newDF3
 
+unique(newDF$colonyNum)
+
 
 
 ```
 
 
 ```{r}
-
 newDF <- droplevels(newDF)
 row.names(newDF) <- 1:nrow(newDF)
 newDF$rewardStatus = tolower(newDF$rewardStatus)
 
 unique(newDF$rewardStatus)
-
 
 summaryDF = as.data.frame(with(newDF, xtabs(~ID + rewardStatus + accNum + packedPollen)))
 
@@ -127,14 +129,39 @@ sw3$IT = sapply(sw3$ID, FUN = function(x) newDF[newDF$ID == x, "ITSpan_mm"][1])
 sw3$prop = sw3$true / (sw3$true + sw3$false)
 write.csv(sw3, file = file.path(figDir, "prelimData.csv"))
 
+sw3$packedPollen <- mapvalues(sw3$packedPollen, from = c(TRUE, FALSE), 
+                              to = c("Packed pollen", "Did not pack pollen"))
 
-
-ggplot(sw3, aes(x = substr(ID, start = 0, stop = 17), y = prop-0.005, fill = packedPollen)) + 
-  geom_bar(stat = "identity") + 
+ggplot(sw3, aes(x = substr(ID, start = 7, stop = 17), y = prop-0.005, fill = packedPollen)) + 
+  geom_bar(stat = "identity", colour="black", lwd = 0.1) + 
   geom_hline(aes(yintercept = 0.5), lty = 2) + 
   theme_classic()+ 
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) + 
-  xlab("Timestamp")
+  theme(axis.text.x = element_text(angle = 40, vjust = 0.9, hjust = 1.0, size =6), 
+        legend.position = "top") + 
+  xlab("Timestamp") + 
+  ylab("Proportion of rewarding visits") + 
+  scale_fill_viridis_d(name = "", option = "D", end = 0.98)
+  
+ggsave(filename = file.path(figDir, "PropRewardVisits_date.pdf"), width = 13/1.3, height = 5/1.3)
+
+sw3$x2 = substr(sw3$ID, start = 7, stop = 17)
+sw4 <- sw3
+sw4$x2 <- factor(sw4$x2, levels = sw4$x2[order(sw4$prop, decreasing = TRUE)])
+sw4$x2 <- formatC(as.numeric(as.factor(as.character(sw4$x2))), width = 2, flag = "0")
+sw4$x3 <- factor(sw4$x2, levels = sw4$x2[order(sw4$prop, decreasing = TRUE)])
+
+
+
+ggplot(sw4, aes(x = x3, y = prop-0.002, fill = packedPollen)) + 
+  geom_bar(stat = "identity", colour="black", lwd = 0.1) + 
+  geom_hline(aes(yintercept = 0.5), lty = 2) + 
+  theme_classic()+ 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5), 
+        legend.position = c(0.8, 0.8)) + 
+  xlab("Bee Number") + 
+  ylab("Proportion of rewarding visits") + 
+  scale_fill_viridis_d(name = "", option = "D", end = 0.98)
+ggsave(filename = file.path(figDir, "PropRewardVisits_PropOrder.pdf"), width = 13/1.3, height = 5/1.3)
   
 ```
 
@@ -145,8 +172,9 @@ ggplot(sw3, aes(x = substr(ID, start = 0, stop = 17), y = prop-0.005, fill = pac
 library(lme4)
 sw4 <- sw3
 
+
 # bias reduced GLM
-m1 <- glmer(cbind(true, false)~ packedPollen + (1|ID), family = binomial("probit"), data = sw4)
+m1 <- glmer(cbind(true, false)~ packedPollen + (1|colonyNum) + (1|ID), family = binomial("probit"), data = sw4)
 summary(m1)
 
 
@@ -182,19 +210,45 @@ pframe$blo<-bb2_se[1,]
 pframe$bhi<-bb2_se[2,]
 pframe$predMean <- pp
 pframe <- pframe[, c("packedPollen", "blo", "bhi", "predMean")]
+pframe$packedPollen <- mapvalues(pframe$packedPollen, from = c("TRUE", "FALSE"),
+                                 to = c("Packed pollen", "Did not pack pollen"))
 pframe
 
 
-ggplot(pframe, aes(x = packedPollen, y = predMean)) + 
-  geom_point() + 
-  geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1)  + 
+ggplot(pframe, aes(x = packedPollen, y = predMean, color = packedPollen, fill = packedPollen)) + 
+  geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.11, size = 1, color = "black")  + 
+  geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1, size = 0.6)  +
+  geom_point(size = 4, pch = 21, color = "black") + 
   theme_classic() + 
-  xlab("Packed Pollen") + 
-  ylab("predicted proportion of visits to rewarding flower") + 
+  theme(legend.position = "none") + 
+  xlab("") + 
+  ylab("Predicted proportion of visits to rewarding flower") + 
   ylim(0,1) + 
-  geom_hline(aes(yintercept = 0.5), lty = 2, col = 'red') 
+  geom_hline(aes(yintercept = 0.5), lty = 2, col = 'grey40', lwd = 0.2) + 
+  scale_fill_viridis_d(end = 0.98) + 
+  scale_color_viridis_d(end = 0.98)
 
-ggsave(file.path(figDir, "propSuccessPollen_25July.pdf"), width = 2, height = 4)
+
+ggsave(file.path(figDir, "propSuccessPollen_25July.pdf"), width = 3, height = 4)
+
+
+# make thin version
+ggplot(pframe, aes(x = 0, y = predMean, color = packedPollen, fill = packedPollen)) + 
+  geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.12, size = 1, color = "black")  + 
+  geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1, size = 0.6)  +
+  geom_point(size = 4, pch = 21, color = "black") + 
+  theme_classic() + 
+  theme(legend.position = "none", 
+        axis.text.x = element_blank(), 
+        axis.ticks.x = element_blank()) + 
+  xlab("") + 
+  xlim(c(-1,1))+
+  ylab("Overall prop. rewarding visits") + 
+  geom_hline(aes(yintercept = 0.5), lty = 2, col = 'grey40', lwd = 0.2) + 
+  scale_fill_viridis_d(end = 0.98) + 
+  scale_color_viridis_d(end = 0.98) + 
+  scale_y_continuous(position = "right", limits = c(0,1))
+ggsave(file.path(figDir, "propSuccessPollen_25July_thin.pdf"), width = 1, height = 3)
 
 colSums(sw3[, 3:4])[2] / sum(colSums(sw3[, 3:4]))
 
@@ -226,7 +280,7 @@ newDF$index = index
 
 
 binomial_smooth <- function(...) {
-  geom_smooth(method = "glm", method.args = list(family = "binomial"), se = FALSE, ...)
+  geom_smooth(method = "glm", method.args = list(family = "binomial"), ...)
 }
 
 newDF2 <- newDF[newDF$index <= 100, ]
@@ -237,16 +291,71 @@ for(ii in 1:nrow(newDF2)){
   newDF2$propIndex[ii] = newDF2$index[ii] / sum(newDF2$ID == newDF2$ID[ii])
 }
 
-newDF2$propIndex
 
 newDF2$logicalReward = as.numeric(newDF2$rewardStatus == "true")
 
 
 newDF2 %>% head
 
+newDF2$Reward_Long = mapvalues(newDF2$logicalReward, from = c(1, 0), 
+                                  to = c("Reward", "No Reward"))
+
+ggplot(newDF2, aes(x = as.factor(ID), fill = Reward_Long)) + 
+  geom_bar(stat = "count") + 
+  theme_classic() + 
+  scale_fill_viridis_d(direction = 1, option = "D")
+
+df1 <- as.data.frame(xtabs(~substr(newDF2$ID, 7, 17)))
+
+names(df1)[1] <- "BeeID"
+df1 <- df1[order(df1$Freq, decreasing = TRUE), ]
+df1$shortID = (formatC(1:nrow(df1) + 100, width = 3, flag = "0"))
+
+newDF2$ID_short = substr(newDF2$ID, start = 7, stop = 17)
+newDF2$ID_veryShort = factor(mapvalues(newDF2$ID_short, from = as.character(df1$BeeID), to = df1$shortID), levels = df1$shortID)
+
+df1$packedPollen = df1$BeeID %in% newDF2$ID_short[newDF2$packedPollen]
 
 
-ggplot(newDF2, aes(x = propIndex, y = logicalReward)) + 
+
+newDF2[newDF2$ID_veryShort == "111", ]
+newDF2$ID_factor = factor(newDF2$ID_short, levels = levels)
+
+ggplot(data=newDF2,aes(x=ID_veryShort,fill=Reward_Long)) + 
+  geom_bar(data=subset(newDF2,Reward_Long=="Reward"),color = 'grey40', lwd = 0.1) +
+  #scale_color_grey(guide = FALSE, start = 1, end = 0) + 
+  geom_bar(data=subset(newDF2,Reward_Long=="No Reward"),aes( y=..count..*(-1)), color = 'grey40', lwd = 0.1) + 
+  scale_y_continuous(breaks=seq(-100,100,10),labels=abs(seq(-100,100,10))) + 
+  #coord_flip() + 
+  theme_classic() + 
+  theme(legend.position = c(0.6,0.8) , 
+        axis.text.x = element_text(angle = 90, size = 7))+ 
+  scale_fill_viridis_d(direction = 1, option = "D", name = "") + 
+  xlab("Bee ID") + 
+  ylab("Number of visits") + 
+  geom_point(data = df1[!df1$packedPollen, ], aes(x = shortID, y = -80), inherit.aes = FALSE, pch = "*", size = 7) + 
+  annotate("text", x = 43, y = -50, label = "    Did not collect pollen in corbicula", size = 4) + 
+annotate("text", x = 43, y = -52, label = "*                           ", size = 8)
+ggsave(file.path(figDir, "BeePopulationPyramid.pdf"), width = 10, height = 4)
+
+
+ggplot(data=newDF2,aes(x=ID_short,fill= Reward_Long, group = Reward_Long)) + 
+  geom_bar(data=subset(newDF2,Reward_Long=="Reward"),color = 'grey40', lwd = 0.1) +
+  #scale_color_grey(guide = FALSE, start = 1, end = 0) + 
+  geom_bar(data=subset(newDF2,Reward_Long=="No Reward"),aes( y=..count..*(-1)), color = 'grey40', lwd = 0.1) + 
+  scale_y_continuous(breaks=seq(-100,100,10),labels=abs(seq(-100,100,10))) + 
+  #coord_flip() + 
+  theme_classic() + 
+  theme(legend.position = "top" , 
+        axis.text.x = element_text(angle = 90, size = 7))+ 
+  scale_fill_viridis_d(direction = 1, option = "D", name = "") + 
+  xlab("Bee ID") + 
+  ylab("Number of visits") 
+ggsave(file.path(figDir, "BeePopulationPyramid_date.pdf"), width = 10, height = 4)
+  
+
+
+ ggplot(newDF2, aes(x = propIndex, y = logicalReward)) + 
   geom_point(position = position_jitter(height = 0.1), size = 0.5) +
   binomial_smooth(aes(color = packedPollen))+  
   geom_line(alpha = 0.2) + 
@@ -261,26 +370,37 @@ ggplot(newDF2, aes(x = propIndex, y = logicalReward)) +
   panel.border = element_rect(colour = "black", fill=NA, size=0.7)
 )
 
-ggplot(newDF3, aes(x = propIndex, y = logicalReward)) + 
-  geom_point(position = position_jitter(height = 0.1), size = 0.5) +
-  binomial_smooth()+  
-  geom_line(alpha = 0.2) + 
-  facet_wrap(~ID) + 
+ggplot(newDF2, aes(x = index, y = logicalReward )) + 
+  # geom_point(position = position_jitter(height = 0.01, width =0.05), size = 5, alpha = 0.1, pch = 21, 
+  #            fill = "grey40", 
+  #            colour = "grey40") +
+  #geom_hex(binwidth = c(3, 0.1))+
+  
+  geom_bin2d(binwidth = c(2,0.3), position = position_nudge(y = 0.07))+
+  #geom_line(alpha = 0.2) + 
+  #facet_wrap(~ID) + 
+  binomial_smooth(se = TRUE, color = 'grey40', lwd = 1)+  
+  
   theme_classic() + 
   xlab("Buzz number")+
   ylab("Reward (1: True, 0: False)")+
   theme(
-  strip.background = element_blank(),
-  strip.text.x = element_blank(), 
-  axis.text.x = element_blank(), 
+  strip.background = element_blank(), 
   panel.border = element_rect(colour = "black", fill=NA, size=0.7)
-)
+  ) + 
+  facet_wrap(~packedPollen,labeller = label_both) + 
+  ylim(c(-0.5,1.5))+ 
+  geom_hline(aes(yintercept = 0.5), lty = 2) + 
+  scale_fill_viridis_c(direction = -1, option = "D")
 
-ggsave(file.path(figDir, "BeeChangeOverTime.pdf"), width = 10, height = 6)
+ggsave(file.path(figDir, "BeeChangeOverTime.pdf"), width = 10, height = 3)
+
+
+
 
 ggplot(newDF2[, ], aes(x = index, y = logicalReward)) + 
   geom_point(position = position_jitter(height = 0.1), size = 0.5) +
-  binomial_smooth()+  
+  binomial_smooth(se = FALSE)+  
   geom_line(alpha = 0.2) + 
   facet_wrap(~ID) + 
   theme_classic() + 
@@ -294,6 +414,34 @@ ggplot(newDF2[, ], aes(x = index, y = logicalReward)) +
 )
 
 ggsave(file.path(figDir, "BeeChangeOverTime_notScaled.pdf"), width = 10, height = 6)
+
+
+# look at 1st reward
+ggplot(newDF2[newDF$index == 1, ], aes(x= as.factor(logicalReward))) + 
+  geom_histogram(stat = "count" ) + 
+  geom_errorbar()
+
+sum(table(newDF2$logicalReward[newDF2$index == 1 ]))
+
+prop.table(table(newDF2$logicalReward[newDF2$index == 1 ]))
+
+pt = prop.test(table(newDF2$logicalReward[newDF2$index == 1 ]))
+
+se = sqrt(pt$estimate * (1- pt$estimate) / sum(table(newDF2$logicalReward[newDF$index == 1 ])))
+CI = data.frame(mean = c(prop.table(table(newDF2$logicalReward[newDF2$index == 1 ]))) )
+CI$upper = CI$mean + 1.96 * se
+CI$lower = CI$mean - 1.96 * se
+CI$reward = mapvalues(row.names(CI), from = c(0,1), to = c("Unrewarding\nflower", "Rewarding\nflower"))
+
+ggplot(CI, aes(x= reward, y = mean)) + 
+  geom_point(size = 2)  + 
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.1, size = 0.6) + 
+  theme_classic() + 
+  geom_hline(aes(yintercept = 0.5), lty = 2, lwd = 0.3) + 
+  ylab("Proportion of first visits") + 
+  xlab("")
+ggsave(file.path(figDir, "ProportionOfFirstVisits.pdf"), width = 4, height = 3)
+
 ```
 
 
@@ -351,7 +499,7 @@ ndf3 %>% head
 
 ggplot(ndf3[, ], aes(x = TimeSinceStart, y = logicalReward)) + 
   geom_point(position = position_jitter(height = 0.1), size = 0.5) +
-  binomial_smooth(color = 'red')+  
+  binomial_smooth( se = FALSE, aes(color = packedPollen))+  
   geom_line(alpha = 0.2) + 
   facet_wrap(~ID) + 
   theme_classic() + 
@@ -362,31 +510,93 @@ ggplot(ndf3[, ], aes(x = TimeSinceStart, y = logicalReward)) +
   strip.text.x = element_blank(), 
   #axis.text.x = element_blank(), 
   panel.border = element_rect(colour = "black", fill=NA, size=0.7)
-)
+  ) + 
+  scale_color_viridis_d(end = 0.97)
 
 ggsave(file.path(figDir, "BeeChangeOverTime_min.pdf"), width = 10, height = 6)
+
 
 ```
 
 
 ```{r}
 
-m1 = glmer(logicalReward ~ index + (1|ID), family = binomial("logit"), data = newDF2)
+m1 = glmer(logicalReward ~ I(index/100) + packedPollen + (1 + packedPollen | ID) + (1|colonyNum), family = binomial("logit"), data = newDF2)
 summary(m1)
 
-preds = predict(m1, newdata = data.frame(index = 1:100, ID = "9999"), type = 'response', re.form = NA, se = TRUE)
+ggplot(newDF2, aes(x= index, y = logicalReward, color = packedPollen)) + 
+  geom_point() + 
+  binomial_smooth() 
 
-pdframe = data.frame(preds)
-pdframe$visitNum = 1:100
+newDat = expand.grid(index = 1:100, packedPollen = c(TRUE, FALSE))
+newDat <- newDat[(newDat$index < max(newDF2$index[newDF2$packedPollen == FALSE])) | 
+            (newDat$packedPollen == TRUE), ]
 
-ggplot(pdframe, aes(x = visitNum , y = fit)) + 
-  geom_ribbon(aes(ymin = fit - 2*se.fit, ymax = fit + 2*se.fit), alpha = 0.3) + 
+preds = predict(m1, newdata = newDat , 
+                type = 'response', re.form = NA, se = TRUE)
+
+pdframe = cbind(preds, newDat)
+pdframe$visitNum = pdframe$index
+pdframe$packedPollen <- mapvalues(pdframe$packedPollen, from = c(TRUE, FALSE), 
+                                  to = c("Packed pollen", "Did not pack pollen"))
+
+
+# make density plots
+bb = density(newDF2$index[newDF$packedPollen == TRUE])
+cc = density(newDF2$index[newDF$packedPollen == FALSE])
+
+bb$n
+cc$n
+
+dd = rbind(with(bb, 
+                rbind(data.frame(x, y = y*n, packedPollen = TRUE), 
+                      expand.grid(x = 100:0, y = 0, packedPollen = TRUE))), 
+           with(cc, 
+                rbind(data.frame(x, y = y*n, packedPollen = FALSE), 
+                expand.grid(x = 100:0, y = 0, packedPollen = FALSE))))
+dd <- dd[dd$x <= 100 & dd$x >= 0, ]
+dd$y <- dd$y / max(dd$y)
+dd$packedPollen <- mapvalues(dd$packedPollen, from = c(TRUE, FALSE), 
+                                  to = c("Packed pollen", "Did not pack pollen"))
+
+pp = ggplot(pdframe, aes(x = visitNum , y = fit, fill = packedPollen)) + 
+  geom_ribbon(aes(ymin = fit - 2*se.fit, ymax = fit + 2*se.fit), alpha = 0.5, color = NA) + 
   geom_line() + 
   theme_classic() + 
-  labs(x = "Visit number", y= 'Predicted probability of\nvisiting rewarding flower')
-ggsave(file.path(figDir, "BeeChangeOverallPreds.pdf"), width = 5, height = 3.5)
+  ylim(c(0,1)) + 
+  theme(legend.position = c(0.5, 0.96), legend.direction = "horizontal") + 
+  labs(x = "Visit number", y= 'Predicted probability of\nvisiting rewarding flower') + 
+  scale_fill_viridis_d(name = "", end = 0.98) + 
+  scale_color_viridis_d(name = "", end = 0.98) + 
+  geom_hline(aes(yintercept = 0.5), lty = 2, lwd = 0.2) 
+  #geom_point(data=newDF2, aes(x = index, y = packedPollen*0.03), pch= "|", size = 3, position = position_jitter(width = 0.5, height = 0), inherit.aes = FALSE, alpha = 1) 
+pp
+  
+ggsave(file.path(figDir, "BeeChangeOverallPreds_index.pdf"), width = 7.5, height = 3)
+ pp + geom_polygon(data = dd, aes(x = x, y = (y/8)-0.15, fill = relevel(factor(packedPollen), ref = "Packed pollen")), color = 'grey40', lwd = 0.1, inherit.aes = FALSE, alpha = 0.5) + 
+geom_hline(aes(yintercept = 0), lwd = 0.2) + annotate("text", x = 75, y = -0.05, label = "Relative frequencies", size = 2) + 
+     ylim(c(-0.15,1))
+ggsave(file.path(figDir, "BeeChangeOverallPreds_index_frequencies.pdf"), width = 6.5, height = 3)
+
+newDF2$logicalReward
+
+bb = density(newDF2$index[newDF$packedPollen == TRUE])
+cc = density(newDF2$index[newDF$packedPollen == FALSE])
+
+dd = rbind(with(bb, 
+                rbind(data.frame(x, y = y/max(y), packedPollen = TRUE), 
+                      expand.grid(x = 100:0, y = 0, packedPollen = TRUE))), 
+           with(cc, 
+                rbind(data.frame(x, y = y/max(y), packedPollen = FALSE), 
+                expand.grid(x = 100:0, y = 0, packedPollen = FALSE))))
+dd <- dd[dd$x <= 100 & dd$x >= 0, ]
 
 
+
+
+
+ggplot(newDF2, aes(x = index)) + 
+  geom_polygon(data = dd, aes(x = x, y = y, fill = packedPollen), inherit.aes = FALSE, alpha = 0.1)
 ```
 
 # markov chain
