@@ -20,12 +20,12 @@ ipak(packages)
 
 
 # windows
-#dataDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceData/"
-#figDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFLowerChoiceFigures/"
+dataDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceData/"
+figDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFLowerChoiceFigures/"
 
 # mac
-dataDir = "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceData"
-figDir= "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceFigures"
+#dataDir = "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceData"
+#figDir= "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceFigures"
 
 
 
@@ -74,6 +74,13 @@ unique(newDF$Notes[newDF$packedPollen])
 
 unique(newDF$colonyNum)
 
+newDF <- droplevels(newDF)
+row.names(newDF) <- 1:nrow(newDF)
+newDF$rewardStatus = tolower(newDF$rewardStatus)
+
+# write csv
+
+#write.csv(x = newDF, file = file.path(dirname(dataDir), "combinedBeeTrials_bandit.csv"), row.names = FALSE)
 
 
 ```
