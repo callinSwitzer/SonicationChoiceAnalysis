@@ -14,7 +14,7 @@ ipak <- function(pkg){
   sapply(pkg, require, character.only = TRUE)
 }
   
-packages <- c("ggplot2", "car", "plyr", "tidyr", "blmeco", "markovchain")
+packages <- c("car", "plyr", "tidyverse", "blmeco", "markovchain")
 ipak(packages)
 
 
@@ -42,60 +42,63 @@ csvList =  list.files(dataDir)
 
 
 for (ii in csvList){
- 
-  
-   tmp = read.csv(file.path(dataDir, ii), stringsAsFactors = FALSE)
-
+   tmp = read_csv(file.path(dataDir, ii), col_types = cols())
    tmp$ID = ii
-   
    if(ii == csvList[1]) newDF = tmp
    else newDF = rbind(tmp, newDF)
 }  
 
-# clean data
-newDF <- newDF[-grep("discard", tolower(newDF$Notes)), ]
-# remove double reward group
-newDF <- newDF[newDF$treatment != "Dev2/ai0_True__Dev2/ai1_True", ]
-row.names(newDF) = 1:nrow(newDF) # renumber row names
+unique(newDF$Notes)
 newDF$Notes[is.na(newDF$Notes)] <- ""
 
 
-# discard
+# clean data
+newDF <- newDF %>% 
+  mutate(notes = tolower(Notes)) %>% # make lowercase
+  filter(!grepl("disc", notes)) %>% # remove trials labeled as discard
+  ## label bees that don't pack pollen
+  mutate(packedPollen = !grepl(pattern = "corbic", notes)) %>%
+  ## make short version of treatment
+  mutate(trt_group = mapvalues(treatment, 
+                               from = c("Dev2/ai0_True__Dev2/ai1_False", 
+                                         "Dev2/ai0_True__Dev2/ai1_True", 
+                                         "Dev2/ai0_False__Dev2/ai1_False", 
+                                         "Dev2/ai0_False__Dev2/ai1_True"), 
+                               to = c("LeftReward", "DoublePositive", 
+                                      "DoubleNegative", "RightReward")), 
+         rewardStatus = tolower(rewardStatus)) 
+  
+str(newDF)
+
+# check that row.names got re-numbered
+all(row.names(newDF) == 1:nrow(newDF)) 
+
+# Check levels
 unique(newDF$Notes)
-
-
-## label bees that don't pack pollen
-newDF$packedPollen <- !(row.names(newDF) %in% grep(pattern = "corbic", tolower(newDF$Notes))) 
-
 unique(newDF$Notes[newDF$packedPollen])
-
-# comment out to show all bees
-# newDF <- newDF3
-
 unique(newDF$colonyNum)
-
-
-
+unique(newDF$rewardStatus)
 ```
 
 
 ```{r}
-newDF <- droplevels(newDF)
-row.names(newDF) <- 1:nrow(newDF)
-newDF$rewardStatus = tolower(newDF$rewardStatus)
 
-unique(newDF$rewardStatus)
-
-summaryDF = as.data.frame(with(newDF, xtabs(~ID + rewardStatus + accNum + packedPollen)))
-
-summaryDF
+# summary dataset
+summaryDF <- newDF %>%
+  group_by(ID, rewardStatus, accNum, packedPollen) %>%
+  count() %>%
+  rename(Freq = n)
 
 # convert to wide format
-summary_wide = spread(summaryDF,   accNum, Freq)
-summary_wide2 = spread(summaryDF,   rewardStatus, Freq)
+summary_wide <- summaryDF %>%
+  spread(accNum, Freq, fill = 0) 
+
+summary_wide2 <-  summaryDF %>% 
+  spread(rewardStatus, Freq)
+
 
 # insert treatment
-summary_wide$treatment = sapply(summary_wide$ID, FUN = function(x) newDF[newDF$ID == x, "treatment"][1])
+summary_wide$treatment = sapply(summary_wide$ID, FUN = function(x) newDF[newDF$ID == x, "treatment"][[1]][1])
 
 
 summary_wide
@@ -104,7 +107,11 @@ summary_wide
 summary_wide = summary_wide[!((summary_wide$`Dev2/ai0` == 0) & (summary_wide$`Dev2/ai1` == 0)), ]
 
 # remove rows where both rewarded the bee
-summary_wide = summary_wide[summary_wide$treatment != "Dev2/ai0_True__Dev2/ai1_True", ]
+summary_wide <- summary_wide %>%
+  filter(treatment != "Dev2/ai0_True__Dev2/ai1_True")
+
+
+
 summary_wide
 
 # make sure at one column is 0
@@ -121,13 +128,13 @@ sw3$false[is.na(sw3$false)] = 0
 sw3$true[is.na(sw3$true)] = 0
 
 # refref: add hive humber
-sw3$colonyNum = sapply(sw3$ID, FUN = function(x) newDF[newDF$ID == x, "colonyNum"][1])
-sw3$IT = sapply(sw3$ID, FUN = function(x) newDF[newDF$ID == x, "ITSpan_mm"][1])
+sw3$colonyNum = sapply(sw3$ID, FUN = function(x) newDF[newDF$ID == x, "colonyNum"][[1]][1])
+sw3$IT = sapply(sw3$ID, FUN = function(x) newDF[newDF$ID == x, "ITSpan_mm"][[1]][1])
 
 
 # now we're ready for binomial regression
 sw3$prop = sw3$true / (sw3$true + sw3$false)
-write.csv(sw3, file = file.path(figDir, "prelimData.csv"))
+write_csv(sw3, path = file.path(figDir, "prelimData.csv"))
 
 sw3$packedPollen <- mapvalues(sw3$packedPollen, from = c(TRUE, FALSE), 
                               to = c("Packed pollen", "Did not pack pollen"))
@@ -358,6 +365,7 @@ ggplot(data=newDF2,aes(x=ID_short,fill= Reward_Long, group = Reward_Long)) +
   geom_point(data = newDF2, inherit.aes = FALSE, aes(x = ID_short,  y = -88, color = factor(colonyNum)),
             lwd = 4, pch = 15)+ 
   scale_color_viridis_d(direction = 1, option = "plasma",  name = "Colony")
+
 ggsave(file.path(figDir, "BeePopulationPyramid_date.pdf"), width = 10, height = 4)
   
 
@@ -550,7 +558,7 @@ ggsave(file.path(figDir, "BeeChangeOverTime_min.pdf"), width = 10, height = 6)
 
 ```{r}
 
-m1 = glmer(logicalReward ~ I(index/100) + packedPollen + (1 + packedPollen | ID) + (1|colonyNum), family = binomial("logit"), data = newDF2)
+m1 = glmer(logicalReward ~ I(index/100) * packedPollen + (1 + packedPollen | ID) + (1|colonyNum), family = binomial("logit"), data = newDF2)
 summary(m1)
 
 ggplot(newDF2, aes(x= index, y = logicalReward, color = packedPollen)) + 
