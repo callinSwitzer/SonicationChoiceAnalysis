@@ -20,12 +20,12 @@ ipak(packages)
 
 
 # windows
-dataDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceData/"
-figDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFLowerChoiceFigures/"
+#dataDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceData/"
+#figDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFLowerChoiceFigures/"
 
 # mac
-#dataDir = "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceData"
-#figDir= "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceFigures"
+dataDir = "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceData"
+figDir= "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceFigures"
 
 
 
@@ -49,15 +49,22 @@ for (ii in csvList){
 }  
 
 unique(newDF$Notes)
-newDF$Notes[is.na(newDF$Notes)] <- ""
-
 
 # clean data
 newDF <- newDF %>% 
-  mutate(notes = tolower(Notes)) %>% # make lowercase
-  filter(!grepl("disc", notes)) %>% # remove trials labeled as discard
+  # fix one data point that I forgot to label as not packing
+  mutate(Notes = ifelse(grepl(x = .$Notes,
+                               pattern = 
+                     "Accelerometers were getting some inaccurate data"), 
+                         yes = paste0(.$Notes, 
+                                     " Did not pack pollen in coricula"), 
+                         no = .$Notes )) %>%
+  # replace NA's with ""
+  mutate(Notes = ifelse(is.na(.$Notes), "", .$Notes )) %>%
+  mutate(Notes = tolower(Notes)) %>% # make lowercase
+  filter(!grepl("disc", Notes)) %>% # remove trials labeled as discard
   ## label bees that don't pack pollen
-  mutate(packedPollen = !grepl(pattern = "corbic", notes)) %>%
+  mutate(packedPollen = !grepl(pattern = "corbic", Notes)) %>%
   ## make short version of treatment
   mutate(trt_group = mapvalues(treatment, 
                                from = c("Dev2/ai0_True__Dev2/ai1_False", 
@@ -66,31 +73,30 @@ newDF <- newDF %>%
                                          "Dev2/ai0_False__Dev2/ai1_True"), 
                                to = c("LeftReward", "DoublePositive", 
                                       "DoubleNegative", "RightReward")), 
-         rewardStatus = tolower(rewardStatus)) 
+         rewardStatus = tolower(rewardStatus), 
+         rewardStatus = mapvalues(rewardStatus, from = c("true", "false"), 
+                                  to = c("Rewarded", "Unrewarded"))) %>%
+  droplevels()
+  
+
+ 
   
 str(newDF)
-
-# check that row.names got re-numbered
-all(row.names(newDF) == 1:nrow(newDF)) 
 
 # Check levels
 unique(newDF$Notes)
 unique(newDF$Notes[newDF$packedPollen])
 unique(newDF$colonyNum)
-<<<<<<< HEAD
+
 unique(newDF$rewardStatus)
-=======
+
 
 newDF <- droplevels(newDF)
-row.names(newDF) <- 1:nrow(newDF)
-newDF$rewardStatus = tolower(newDF$rewardStatus)
+
 
 # write csv
-
 #write.csv(x = newDF, file = file.path(dirname(dataDir), "combinedBeeTrials_bandit.csv"), row.names = FALSE)
 
-
->>>>>>> 020905e229234894dd1ff66d5de6c2d389c17cb7
 ```
 
 
@@ -104,7 +110,8 @@ summaryDF <- newDF %>%
 
 # convert to wide format
 summary_wide <- summaryDF %>%
-  spread(accNum, Freq, fill = 0) 
+  spread(accNum, Freq, fill = 0)
+  
 
 summary_wide2 <-  summaryDF %>% 
   spread(rewardStatus, Freq)
@@ -114,21 +121,23 @@ summary_wide2 <-  summaryDF %>%
 summary_wide$treatment = sapply(summary_wide$ID, FUN = function(x) newDF[newDF$ID == x, "treatment"][[1]][1])
 
 
-summary_wide
+print(summary_wide, n = Inf)
 
 # remove rows where both rewards are 0
 summary_wide = summary_wide[!((summary_wide$`Dev2/ai0` == 0) & (summary_wide$`Dev2/ai1` == 0)), ]
 
 # remove rows where both rewarded the bee
 summary_wide <- summary_wide %>%
-  filter(treatment != "Dev2/ai0_True__Dev2/ai1_True")
+  filter(treatment != "Dev2/ai0_True__Dev2/ai1_True" & 
+           treatment != "Dev2/ai0_False__Dev2/ai1_False")
 
 
 
 summary_wide
 
 # make sure at one column is 0
-summary_wide$`Dev2/ai0` ==0 | summary_wide$`Dev2/ai1` == 0
+summary_wide$`Dev2/ai0` == 0 | summary_wide$`Dev2/ai1` == 0
+summary_wide[!(summary_wide$`Dev2/ai0` == 0 | summary_wide$`Dev2/ai1` == 0),]
 
 # combine to make a visit column
 summary_wide$visits = summary_wide$`Dev2/ai0` + summary_wide$`Dev2/ai1`
@@ -137,16 +146,16 @@ summary_wide$visits = summary_wide$`Dev2/ai0` + summary_wide$`Dev2/ai1`
 sw3 = spread(summary_wide[, c("ID", "rewardStatus", "visits", "treatment", "packedPollen")],   rewardStatus, visits)
 
 # replace NA with 0
-sw3$false[is.na(sw3$false)] = 0
-sw3$true[is.na(sw3$true)] = 0
+sw3$Unrewarded[is.na(sw3$Unrewarded)] = 0
+sw3$Rewarded[is.na(sw3$Rewarded)] = 0
 
-# refref: add hive humber
+# add hive humber
 sw3$colonyNum = sapply(sw3$ID, FUN = function(x) newDF[newDF$ID == x, "colonyNum"][[1]][1])
 sw3$IT = sapply(sw3$ID, FUN = function(x) newDF[newDF$ID == x, "ITSpan_mm"][[1]][1])
 
 
 # now we're ready for binomial regression
-sw3$prop = sw3$true / (sw3$true + sw3$false)
+sw3$prop = sw3$Rewarded / (sw3$Rewarded + sw3$Unrewarded)
 write_csv(sw3, path = file.path(figDir, "prelimData.csv"))
 
 sw3$packedPollen <- mapvalues(sw3$packedPollen, from = c(TRUE, FALSE), 
@@ -182,6 +191,7 @@ ggplot(sw4, aes(x = x3, y = prop-0.002, fill = packedPollen)) +
   ylab("Proportion of rewarding visits") + 
   scale_fill_viridis_d(name = "", option = "D", end = 0.98)
 ggsave(filename = file.path(figDir, "PropRewardVisits_PropOrder.pdf"), width = 13/1.3, height = 5/1.3)
+
   
 ```
 
@@ -193,8 +203,8 @@ library(lme4)
 sw4 <- sw3
 
 
-# bias reduced GLM
-m1 <- glmer(cbind(true, false)~ packedPollen + (1|colonyNum) + (1|ID), family = binomial("probit"), data = sw4)
+#  GLM
+m1 <- glmer(cbind(Rewarded, Unrewarded)~ packedPollen + (1|colonyNum) + (1|ID), family = binomial("logit"), data = sw4)
 summary(m1)
 
 
@@ -223,7 +233,7 @@ bm = bootMer(m1, FUN=function(x){
                                 re.form=NA, 
                                 type = 'response')
                         }, 
-             nsim = 100)
+             nsim = 400)
 
 bb2_se <-apply(bm$t,2,function(x) quantile(x, probs = c(0.025, 0.975)))
 pframe$blo<-bb2_se[1,]
@@ -249,7 +259,7 @@ ggplot(pframe, aes(x = packedPollen, y = predMean, color = packedPollen, fill = 
   scale_color_viridis_d(end = 0.98)
 
 
-ggsave(file.path(figDir, "propSuccessPollen_25July.pdf"), width = 3, height = 4)
+ggsave(file.path(figDir, "propSuccessPollen_8Aug.pdf"), width = 3, height = 4)
 
 
 # make thin version
@@ -268,7 +278,7 @@ ggplot(pframe, aes(x = 0, y = predMean, color = packedPollen, fill = packedPolle
   scale_fill_viridis_d(end = 0.98) + 
   scale_color_viridis_d(end = 0.98) + 
   scale_y_continuous(position = "right", limits = c(0,1))
-ggsave(file.path(figDir, "propSuccessPollen_25July_thin.pdf"), width = 1, height = 3)
+ggsave(file.path(figDir, "propSuccessPollen_8Aug_thin.pdf"), width = 1, height = 3)
 
 colSums(sw3[, 3:4])[2] / sum(colSums(sw3[, 3:4]))
 
@@ -312,7 +322,7 @@ for(ii in 1:nrow(newDF2)){
 }
 
 
-newDF2$logicalReward = as.numeric(newDF2$rewardStatus == "true")
+newDF2$logicalReward = as.numeric(newDF2$rewardStatus == "Rewarded")
 
 
 newDF2 %>% head
@@ -355,8 +365,8 @@ ggplot(data=newDF2,aes(x=ID_veryShort,fill=Reward_Long)) +
   xlab("Bee ID") + 
   ylab("Number of visits") + 
   geom_point(data = df1[!df1$packedPollen, ], aes(x = shortID, y = -80), inherit.aes = FALSE, pch = "*", size = 7) + 
-  annotate("text", x = 43, y = -50, label = "    Did not collect pollen in corbicula", size = 4) + 
-annotate("text", x = 43, y = -52, label = "*                           ", size = 8) 
+  annotate("text", x = 73, y = -70, label = "    Did not collect pollen in corbicula", size = 4) + 
+annotate("text", x = 73, y = -72, label = "*                           ", size = 8) 
 # geom_point(data = newDF2, inherit.aes = FALSE, aes(x = ID_veryShort,  y = -88, color = factor(colonyNum)),
 #             lwd = 4, pch = 15)+ 
 #   scale_color_viridis_d(direction = 1, option = "plasma", end = 0.9, begin = 0.3, name = "Colony")
@@ -466,6 +476,23 @@ ggplot(newDF2[newDF2$ID %in% samp, ], aes(x = index, y = logicalReward)) +
 ggsave(file.path(figDir, "BeeChangeOverTime_notScaled_small.pdf"), width = 8, height = 4)
 
 
+# look at timeseries for bees that did not pack pollen
+ggplot(newDF2[newDF2$packedPollen == FALSE & index > 30, ], aes(x = index, y = logicalReward)) + 
+  geom_point(position = position_jitter(height = 0.02), size = 2, alpha = 0.7) +
+  #binomial_smooth(se = FALSE)+  
+  geom_line(alpha = 0.2) + 
+  facet_wrap(~ID_short) + 
+  theme_classic() + 
+  xlab("Buzz number")+
+  ylab("")+
+  theme(
+  strip.background = element_blank(),
+  
+  panel.border = element_rect(colour = "black", fill=NA, size=0.7)
+  ) + 
+  scale_y_continuous(breaks = c(0,1), labels = c("No Reward", "Reward")) + 
+  scale_x_continuous(breaks = c(0, 50, 100))
+
 # look at 1st reward
 ggplot(newDF2[newDF$index == 1, ], aes(x= as.factor(logicalReward))) + 
   geom_histogram(stat = "count" ) + 
@@ -570,30 +597,73 @@ ggsave(file.path(figDir, "BeeChangeOverTime_min.pdf"), width = 10, height = 6)
 
 
 ```{r}
+newDF2$treatment
+newDF3 <- newDF2 %>%
+  filter(treatment == "Dev2/ai0_False__Dev2/ai1_True" | treatment == "Dev2/ai0_True__Dev2/ai1_False")
 
-m1 = glmer(logicalReward ~ I(index/100) * packedPollen + (1 + packedPollen | ID) + (1|colonyNum), family = binomial("logit"), data = newDF2)
+
+m1 = glmer(logicalReward ~ I(index/100) * packedPollen + (1 + packedPollen | ID) + (1|colonyNum), family = binomial("logit"), data = newDF3)
 summary(m1)
 
-ggplot(newDF2, aes(x= index, y = logicalReward, color = packedPollen)) + 
+
+m12 = update(m1, .~. - I(index/100) : packedPollen)
+summary(m12)
+anova(m1, m12, test = "LRT")
+
+
+m13 <- update(m1, .~. + I((index/100)^2))
+
+# install.packages("gamm4")
+library(gamm4)
+m4 <- gamm4(logicalReward ~ s(I(index/100), by = as.factor(packedPollen)), random= ~ (1 | ID) + (1|colonyNum), family = binomial("logit"), data = newDF3)
+summary(m4$mer)
+summary(m4$gam)
+
+
+
+m3 <- glmer(logicalReward ~ I(index/100) +  (1 | ID) + (1|colonyNum), family = binomial("logit"), data = newDF3)
+summary(m3)
+anova(m12, m3, test = "LRT")
+# different resulte b/c one ID is over-represented? 
+m123 = glm(logicalReward ~ I(index/100) , family = binomial("logit"), data = newDF2[newDF2$packedPollen == FALSE,])
+summary(m123)
+
+plot(y = predict(m12, re.form = NA, type = 'response'), x = newDF3[newDF3$packedPollen == FALSE,]$index)
+
+ggplot(newDF3, aes(x= index, y = logicalReward, color = packedPollen)) + 
   geom_point() + 
-  binomial_smooth() 
+  #geom_smooth() + 
+  binomial_smooth() + 
+  facet_wrap(~packedPollen) + 
+  scale_colour_viridis_d()
 
 newDat = expand.grid(index = 1:100, packedPollen = c(TRUE, FALSE))
-newDat <- newDat[(newDat$index < max(newDF2$index[newDF2$packedPollen == FALSE])) | 
+newDat <- newDat[(newDat$index <= max(newDF3$index[newDF3$packedPollen == FALSE])) | 
             (newDat$packedPollen == TRUE), ]
 
-preds = predict(m1, newdata = newDat , 
-                type = 'response', re.form = NA, se = TRUE)
+preds = predict(m4$gam, newdata = newDat , 
+                type = 'link', re.form = NA, se = TRUE)
+
+ilogit <- function(x){
+  exp(x)/(1+exp(x))
+}
+
+str(preds)
 
 pdframe = cbind(preds, newDat)
+pdframe <- pdframe %>%
+  mutate(upper = ilogit(fit + 1.96*.$se.fit), 
+         lower = ilogit(fit - 1.96*.$se.fit), 
+         fit = ilogit(fit))
+
 pdframe$visitNum = pdframe$index
 pdframe$packedPollen <- mapvalues(pdframe$packedPollen, from = c(TRUE, FALSE), 
                                   to = c("Packed pollen", "Did not pack pollen"))
 
 
 # make density plots
-bb = density(newDF2$index[newDF2$packedPollen == TRUE])
-cc = density(newDF2$index[newDF2$packedPollen == FALSE])
+bb = density(newDF3$index[newDF3$packedPollen == TRUE])
+cc = density(newDF3$index[newDF3$packedPollen == FALSE])
 
 bb$n
 cc$n
@@ -610,30 +680,32 @@ dd$packedPollen <- mapvalues(dd$packedPollen, from = c(TRUE, FALSE),
                                   to = c("Packed pollen", "Did not pack pollen"))
 
 pp = ggplot(pdframe, aes(x = visitNum , y = fit, fill = packedPollen)) + 
-  geom_ribbon(aes(ymin = fit - 2*se.fit, ymax = fit + 2*se.fit), alpha = 0.5, color = NA) + 
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.5, color = NA) + 
   geom_line() + 
   theme_classic() + 
   ylim(c(0,1)) + 
-  theme(legend.position = c(0.5, 0.96), legend.direction = "horizontal") + 
+  theme(legend.position = c(0.7, 0.1 ), legend.direction = "horizontal") + 
   labs(x = "Visit number", y= 'Predicted probability of\nvisiting rewarding flower') + 
   scale_fill_viridis_d(name = "", end = 0.98) + 
   scale_color_viridis_d(name = "", end = 0.98) + 
-  geom_hline(aes(yintercept = 0.5), lty = 2, lwd = 0.2) 
+  geom_hline(aes(yintercept = 0.5), lty = 2, lwd = 0.2)  + 
+  geom_hline(aes(yintercept = 1), lty = 2, lwd = 0.2) 
   #geom_point(data=newDF2, aes(x = index, y = packedPollen*0.03), pch= "|", size = 3, position = position_jitter(width = 0.5, height = 0), inherit.aes = FALSE, alpha = 1) 
 pp
   
 ggsave(file.path(figDir, "BeeChangeOverallPreds_index.pdf"), width = 7.5, height = 3)
- pp + geom_polygon(data = dd, aes(x = x, y = (y/8)-0.15, fill = relevel(factor(packedPollen), ref = "Packed pollen")), color = 'grey40', lwd = 0.1, inherit.aes = FALSE, alpha = 0.5) + 
-geom_hline(aes(yintercept = 0), lwd = 0.2) + annotate("text", x = 75, y = -0.05, label = "Relative frequencies", size = 2) + 
+ 
+
+pp + 
+  geom_polygon(data = dd, aes(x = x, y = (y/8)-0.15, 
+                              fill = relevel(factor(packedPollen), ref = "Packed pollen")), 
+               color = 'grey40', lwd = 0.1, inherit.aes = FALSE, alpha = 0.5) + 
+
+  geom_hline(aes(yintercept = 0), lwd = 0.2) + 
+  theme(legend.position = c(0.7, 0.3 ), legend.direction = "horizontal") + 
+  annotate("text", x = 75, y = -0.05, label = "Relative frequencies", size = 2) + 
      ylim(c(-0.15,1))
 ggsave(file.path(figDir, "BeeChangeOverallPreds_index_frequencies.pdf"), width = 6.5, height = 3)
-
-newDF2$logicalReward
-
-
-
-
-
 
 ggplot(newDF2, aes(x = index)) + 
   geom_polygon(data = dd, aes(x = x, y = y, fill = packedPollen), inherit.aes = FALSE, alpha = 0.1)
