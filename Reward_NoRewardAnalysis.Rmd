@@ -17,18 +17,19 @@ ipak <- function(pkg){
 packages <- c("car", "plyr", "tidyverse", "blmeco", "markovchain")
 ipak(packages)
 
+{if(grepl(pattern = "win", ignore.case = TRUE, x = Sys.info()[1])){
+  # windows
+  dataDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceData/"
+  figDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFLowerChoiceFigures/"
+}
+else{
+  # mac
+  dataDir = "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceData"
+  figDir= "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceFigures"
+}}
 
 
-# windows
-#dataDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceData/"
-#figDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFLowerChoiceFigures/"
-
-# mac
-dataDir = "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceData"
-figDir= "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceFigures"
-
-
-
+print(dataDir)
 ```
 
 
