@@ -14,7 +14,7 @@ ipak <- function(pkg){
   sapply(pkg, require, character.only = TRUE)
 }
   
-packages <- c("car", "plyr", "tidyverse", "blmeco", "markovchain")
+packages <- c("car","blmeco", "markovchain", "tidyverse")
 ipak(packages)
 
 {if(grepl(pattern = "wind", ignore.case = TRUE, x = Sys.info()[1])){
