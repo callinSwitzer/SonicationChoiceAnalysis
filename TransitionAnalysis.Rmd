@@ -1,0 +1,330 @@
+---
+title: "Analysis transitions of bees between rewarding and non-rewarding flowers"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# define data and figure directories
+windows = ifelse(grepl(pattern = "wind", ignore.case = TRUE, 
+                       x = Sys.info()[1]), TRUE, FALSE)
+  
+{if(windows){
+  rd = "D:/Dropbox/SonicationBehavior"
+}
+else{
+  rd = "/Users/cswitzer/Dropbox/SonicationBehavior"
+}}
+
+knitr::opts_knit$set(root.dir =rd )
+```
+
+
+```{r}
+ipak <- function(pkg){
+  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+  if(length(new.pkg)) install.packages(new.pkg, dependencies = TRUE)
+  sapply(pkg, require, character.only = TRUE)
+}
+  
+packages <- c("car", "plyr", "blmeco", "markovchain", "msm", "tidyverse")
+ipak(packages)
+
+{if(grepl(pattern = "wind", ignore.case = TRUE, x = Sys.info()[1])){
+  # windows
+  dataDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceData/"
+  figDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFLowerChoiceFigures/"
+}
+else{
+  # mac
+  dataDir = "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceData"
+  figDir= "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceFigures"
+}}
+
+
+print(dataDir)
+```
+
+
+
+
+
+
+```{r}
+# load in data
+csvList =  list.files(dataDir)
+
+
+for (ii in csvList){
+   tmp = read_csv(file.path(dataDir, ii), col_types = cols())
+   tmp$ID = ii
+   if(ii == csvList[1]) newDF = tmp
+   else newDF = rbind(tmp, newDF)
+}  
+
+unique(newDF$Notes)
+
+# clean data
+newDF <- newDF %>% 
+  # fix one data point that I forgot to label as not packing
+  mutate(Notes = ifelse(grepl(x = .$Notes,
+                               pattern = 
+                     "Accelerometers were getting some inaccurate data"), 
+                         yes = paste0(.$Notes, 
+                                     " Did not pack pollen in coricula"), 
+                         no = .$Notes )) %>%
+  # replace NA's with ""
+  mutate(Notes = ifelse(is.na(.$Notes), "", .$Notes )) %>%
+  mutate(Notes = tolower(Notes)) %>% # make lowercase
+  filter(!grepl("disc", Notes)) %>% # remove trials labeled as discard
+  ## label bees that don't pack pollen
+  mutate(packedPollen = !grepl(pattern = "corbic", Notes)) %>%
+  ## make short version of treatment
+  mutate(trt_group = mapvalues(treatment, 
+                               from = c("Dev2/ai0_True__Dev2/ai1_False", 
+                                         "Dev2/ai0_True__Dev2/ai1_True", 
+                                         "Dev2/ai0_False__Dev2/ai1_False", 
+                                         "Dev2/ai0_False__Dev2/ai1_True"), 
+                               to = c("LeftReward", "DoublePositive", 
+                                      "DoubleNegative", "RightReward")), 
+         rewardStatus = tolower(rewardStatus), 
+         rewardStatus = mapvalues(rewardStatus, from = c("true", "false"), 
+                                  to = c("Rewarded", "Unrewarded"))) %>%
+  droplevels()
+  
+
+ 
+  
+str(newDF)
+
+# Check levels
+unique(newDF$Notes)
+unique(newDF$Notes[newDF$packedPollen])
+unique(newDF$colonyNum)
+
+unique(newDF$rewardStatus)
+
+
+newDF <- droplevels(newDF)
+
+
+
+rewards1 = newDF %>%
+  mutate(rewardStatus_L = (rewardStatus == "Rewarded")*1 + 1) %>%
+  filter(trt_group == "LeftReward" | trt_group == "RightReward") %>%
+  
+  select(ID, rewardStatus_L, timestamp, packedPollen) %>%
+  arrange((timestamp)) %>%
+  group_by(ID) %>%
+  mutate(buzzNum = row_number()) %>%
+  filter(buzzNum <= 100) %>%
+  ungroup() %>%
+  complete(ID, buzzNum, fill = list(rewardStatus_L = 3, timestamp = "None")) %>%
+  fill(packedPollen) %>%
+  # keep only 1 instance of leaving
+  group_by(ID, timestamp) 
+rewards = rewards1 %>% 
+  filter(row_number(rewardStatus_L) == 1) %>%
+  mutate(packedPollen = packedPollen*1)
+  
+# View(rewards)
+
+rewards
+
+# plot proportion in each state with ggplot
+rew2 <- rewards1 %>%
+  ungroup() %>%
+  mutate(rewardStatus_word = recode(.$rewardStatus_L, "1" = "No reward", 
+                                   "2" = "reward", "3" = "quit"))%>%
+  mutate(i = 1) %>%
+  spread(rewardStatus_word, i, fill = 0 ) %>%
+  group_by(buzzNum, packedPollen) %>%
+  summarize(meanNo =mean(`No reward`), 
+            meanRe = mean(`reward`), 
+            meanQuit = mean(`quit`)) %>%
+  gather(key = rewardStatus, value = propReward, meanNo:meanQuit)
+rew2
+
+ggplot(rew2, aes(x = buzzNum, y = propReward, color = rewardStatus)) + 
+  geom_line(lwd = 2) + 
+  facet_wrap(.~packedPollen, labeller = "label_both", ncol = 1) + 
+  theme_classic() + 
+  scale_color_viridis_d(direction = -1)
+
+
+recode(.x = rewards$rewardStatus_L, "1" = "no reward", 
+                                   "2" = "reward", "3" = "quit")
+
+# write csv
+#write.csv(x = newDF, file = file.path(dirname(dataDir), "combinedBeeTrials_bandit.csv"), row.names = FALSE)
+
+```
+
+
+
+## multi-state model (MSM)
+https://cran.r-project.org/web/packages/msm/vignettes/msm-manual.pdf
+
+```{r}
+statetable.msm(rewardStatus_L, ID, data = rewards)
+
+# define the "allowed" trainsitions
+Q = rbind(c(1, 1, 1), 
+          c(1, 1, 1), 
+          c(0, 0, 0)) # state 3 is "give up," so it is an absorbing state
+
+# get initialization for Q matrix
+Q.crude <- crudeinits.msm(rewardStatus_L ~ buzzNum , ID, data=rewards[rewards$packedPollen == 1,], qmatrix=Q)
+
+
+Q.crude
+# run msm
+buzz_msm <- msm(rewardStatus_L ~ buzzNum, subject = ID, data = rewards, 
+                covariates = ~packedPollen,
+                qmatrix = Q.crude, exacttimes = TRUE)
+
+buzz_msm <- msm(rewardStatus_L ~ buzzNum, subject = ID, data = rewards[rewards$packedPollen == 1,], qmatrix = Q.crude, exacttimes = TRUE)
+
+buzz_msm <- msm(rewardStatus_L ~ buzzNum, subject = ID, data = rewards[rewards$packedPollen == 0,], qmatrix = Q.crude, exacttimes = TRUE)
+
+
+
+buzz_msm
+
+# look at two group transition matrices
+qmatrix.msm(buzz_msm, covariates = list(packedPollen = 1))
+qmatrix.msm(buzz_msm, covariates = list(packedPollen = 0))
+
+# look at transition probabilities at a certain time
+pmatrix.msm(buzz_msm, t = 1, covariates = list(packedPollen = 1))
+pmatrix.msm(buzz_msm, t = 1, covariates = list(packedPollen = 0))
+pmatrix.msm(buzz_msm, t = 10)
+
+# sojourn times
+sojourn.msm(buzz_msm, covariates = list(packedPollen = 1))
+
+
+# total length of stay
+totlos.msm(buzz_msm, covariates = list(packedPollen = 1))
+totlos.msm(buzz_msm, covariates = list(packedPollen = 0))
+
+# hazard ratios for transition
+hazard.msm(buzz_msm)
+
+# plot
+plot(buzz_msm, covariates = list(packedPollen = 1))
+plot(buzz_msm, covariates = list(packedPollen = 0))
+
+
+# plot prevalence
+# I don't think observed changes workds
+plot.prevalence.msm(buzz_msm, mintime=0, maxtime=100, 
+                    covariates = list(packedPollen = 0))
+
+
+# here's a work-around
+buzz_msm <- msm(rewardStatus_L ~ buzzNum, subject = ID, data = rewards[rewards$packedPollen == 1,], qmatrix = Q.crude, exacttimes = TRUE)
+plot.prevalence.msm(buzz_msm, mintime=0, maxtime=100, ci = "normal")
+#plot.survfit.msm(buzz_msm, ci = 'norm')
+
+
+prevs = prevalence.msm(buzz_msm, times=seq(1,100,1))$`Expected percentages`/100
+
+prevs2 <- as.data.frame(prevs) %>% 
+  mutate(times = row_number()) %>%
+  gather(key = state, value = expectedProp, -times) %>% 
+  mutate(state2 = recode(as.character(.$state), 
+                         "State 3" = "meanQuit", 
+                         "State 1" = "meanNo", 
+                         "State 2" = "meanRe"
+                         ))
+
+ggplot(prevs2, aes(x = times, y = expectedProp)) + 
+  geom_line(aes(color = state2), lty = 2) + 
+  geom_line(data = rew2[rew2$packedPollen == 1,], aes(x = buzzNum, y = propReward, color = interaction(rewardStatus))) + 
+  theme_classic() + 
+  scale_color_viridis_d(direction = -1)
+
+# different category
+buzz_msm <- msm(rewardStatus_L ~ buzzNum, subject = ID, data = rewards[rewards$packedPollen == 0,], qmatrix = Q.crude, exacttimes = TRUE)
+plot.prevalence.msm(buzz_msm, mintime=0, maxtime=100)
+#plot.survfit.msm(buzz_msm, ci = "norm")
+
+prevs = prevalence.msm(buzz_msm, times=seq(1,100,1))$`Expected percentages`/100
+
+prevs2 <- as.data.frame(prevs) %>% 
+  mutate(times = row_number()) %>%
+  gather(key = state, value = expectedProp, -times)
+  
+
+
+ggplot(prevs2, aes(x = times, y = expectedProp)) + 
+  geom_line(aes(color = state)) + 
+  geom_line(data = rew2[rew2$packedPollen == 0,], aes(x = buzzNum, y = propReward, color = interaction(rewardStatus))) + 
+
+#  facet_wrap(.~packedPollen, labeller = "label_both", ncol = 1) + 
+  theme_classic() + 
+  scale_color_viridis_d(direction = -1)
+
+
+
+```
+
+```{r}
+# piecewise transition matrix
+buzz_msm <- msm(rewardStatus_L ~ buzzNum, subject = ID, data = rewards, covariates = ~packedPollen, qmatrix = Q.crude, exacttimes = TRUE,pci = seq(2,99,10))
+buzz_msm
+
+buzz_msm2 <- msm(rewardStatus_L ~ buzzNum, subject = ID, data = rewards, covariates = ~packedPollen, qmatrix = Q.crude, exacttimes = TRUE)
+buzz_msm2
+
+pmatrix.msm(buzz_msm, t = 1, covariates = list(packedPollen = 0))
+
+times <- c(5, 10, 50)
+covariates <- list(list(packedPollen = 0), list(packedPollen = 0), list(packedPollen = 0), list(packedPollen = 4))
+
+
+pmatrix.piecewise.msm(buzz_msm, t1 = 10, t2 = 20, times, covariates)
+```
+
+
+
+
+
+
+# markov chain
+
+```{r}
+x <- newDF2$logicalReward[newDF2$packedPollen]
+xChar<-as.character(x)
+
+mcX<-markovchainFit(xChar)$estimate
+mcX
+plot(mcX)
+
+
+sequenceMatr <- createSequenceMatrix(x, sanitize = FALSE)
+mcFitMLE <- markovchainFit(data = x)
+mcFitBSP <- markovchainFit(data = x, method = "bootstrap", nboot = 5, name = "Bootstrap Mc")
+
+
+# make list
+myList<-list()
+for (i in 1:length(unique(newDF2$ID))) {
+  myList[[i]]<-as.character(newDF2$logicalReward[newDF2$ID == unique(newDF2$ID)[i]])
+}
+
+singleMcFromList<-markovchainFit(data=myList,name="listFit") #fit the MC
+singleMcFromList
+
+set.seed(123)
+pdf(file.path(figDir, "BeeMarkovChain.pdf"), width = 8, height = 6)
+plot(singleMcFromList$estimate)
+dev.off()
+
+```
