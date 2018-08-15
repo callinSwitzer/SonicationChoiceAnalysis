@@ -6,15 +6,31 @@ editor_options:
 ---
 
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
 
-```{r, setup}
+# define data and figure directories
+windows = ifelse(grepl(pattern = "wind", ignore.case = TRUE, 
+                       x = Sys.info()[1]), TRUE, FALSE)
+  
+{if(windows){
+  rd = "D:/Dropbox/SonicationBehavior"
+}
+else{
+  rd = "/Users/cswitzer/Dropbox/SonicationBehavior"
+}}
+
+knitr::opts_knit$set(root.dir =rd )
+```
+
+```{r}
 ipak <- function(pkg){
   new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
   if(length(new.pkg)) install.packages(new.pkg, dependencies = TRUE)
   sapply(pkg, require, character.only = TRUE)
 }
   
-packages <- c("car","blmeco", "markovchain", "tidyverse")
+packages <- c("lme4", "car","blmeco", "markovchain", "tidyverse")
 ipak(packages)
 
 {if(grepl(pattern = "wind", ignore.case = TRUE, x = Sys.info()[1])){
@@ -67,7 +83,7 @@ newDF <- newDF %>%
   ## label bees that don't pack pollen
   mutate(packedPollen = !grepl(pattern = "corbic", Notes)) %>%
   ## make short version of treatment
-  mutate(trt_group = mapvalues(treatment, 
+  mutate(trt_group = plyr::mapvalues(treatment, 
                                from = c("Dev2/ai0_True__Dev2/ai1_False", 
                                          "Dev2/ai0_True__Dev2/ai1_True", 
                                          "Dev2/ai0_False__Dev2/ai1_False", 
@@ -75,7 +91,7 @@ newDF <- newDF %>%
                                to = c("LeftReward", "DoublePositive", 
                                       "DoubleNegative", "RightReward")), 
          rewardStatus = tolower(rewardStatus), 
-         rewardStatus = mapvalues(rewardStatus, from = c("true", "false"), 
+         rewardStatus = plyr::mapvalues(rewardStatus, from = c("true", "false"), 
                                   to = c("Rewarded", "Unrewarded"))) %>%
   droplevels()
   
@@ -159,7 +175,7 @@ sw3$IT = sapply(sw3$ID, FUN = function(x) newDF[newDF$ID == x, "ITSpan_mm"][[1]]
 sw3$prop = sw3$Rewarded / (sw3$Rewarded + sw3$Unrewarded)
 write_csv(sw3, path = file.path(figDir, "prelimData.csv"))
 
-sw3$packedPollen <- mapvalues(sw3$packedPollen, from = c(TRUE, FALSE), 
+sw3$packedPollen <- plyr::mapvalues(sw3$packedPollen, from = c(TRUE, FALSE), 
                               to = c("Packed pollen", "Did not pack pollen"))
 
 ggplot(sw3, aes(x = substr(ID, start = 7, stop = 17), y = prop-0.005, fill = packedPollen)) + 
@@ -200,11 +216,10 @@ ggsave(filename = file.path(figDir, "PropRewardVisits_PropOrder.pdf"), width = 1
 ## GLM
 
 ```{r}
-library(lme4)
+
 sw4 <- sw3
 
-
-#  GLM
+#  GLMER
 m1 <- glmer(cbind(Rewarded, Unrewarded)~ packedPollen + (1|colonyNum) + (1|ID), family = binomial("logit"), data = sw4)
 summary(m1)
 
@@ -241,7 +256,7 @@ pframe$blo<-bb2_se[1,]
 pframe$bhi<-bb2_se[2,]
 pframe$predMean <- pp
 pframe <- pframe[, c("packedPollen", "blo", "bhi", "predMean")]
-pframe$packedPollen <- mapvalues(pframe$packedPollen, from = c("TRUE", "FALSE"),
+pframe$packedPollen <- plyr::mapvalues(pframe$packedPollen, from = c("TRUE", "FALSE"),
                                  to = c("Packed pollen", "Did not pack pollen"))
 pframe
 
@@ -328,7 +343,7 @@ newDF2$logicalReward = as.numeric(newDF2$rewardStatus == "Rewarded")
 
 newDF2 %>% head
 
-newDF2$Reward_Long = mapvalues(newDF2$logicalReward, from = c(1, 0), 
+newDF2$Reward_Long = plyr::mapvalues(newDF2$logicalReward, from = c(1, 0), 
                                   to = c("Reward", "No Reward"))
 
 ggplot(newDF2, aes(x = as.factor(ID), fill = Reward_Long)) + 
@@ -343,7 +358,7 @@ df1 <- df1[order(df1$Freq, decreasing = TRUE), ]
 df1$shortID = (formatC(1:nrow(df1) + 100, width = 3, flag = "0"))
 
 newDF2$ID_short = substr(newDF2$ID, start = 7, stop = 17)
-newDF2$ID_veryShort = factor(mapvalues(newDF2$ID_short, from = as.character(df1$BeeID), to = df1$shortID), levels = df1$shortID)
+newDF2$ID_veryShort = factor(plyr::mapvalues(newDF2$ID_short, from = as.character(df1$BeeID), to = df1$shortID), levels = df1$shortID)
 
 df1$packedPollen = df1$BeeID %in% newDF2$ID_short[newDF2$packedPollen]
 
@@ -562,7 +577,7 @@ se = sqrt(pt$estimate * (1- pt$estimate) / sum(table(newDF2$logicalReward[newDF$
 CI = data.frame(mean = c(prop.table(table(newDF2$logicalReward[newDF2$index == 1 ]))) )
 CI$upper = CI$mean + 1.96 * se
 CI$lower = CI$mean - 1.96 * se
-CI$reward = mapvalues(row.names(CI), from = c(0,1), to = c("Unrewarding\nflower", "Rewarding\nflower"))
+CI$reward = plyr::mapvalues(row.names(CI), from = c(0,1), to = c("Unrewarding\nflower", "Rewarding\nflower"))
 
 ggplot(CI, aes(x= reward, y = mean)) + 
   geom_point(size = 2)  + 
@@ -669,9 +684,58 @@ m13 <- update(m1, .~. + I((index/100)^2))
 
 # install.packages("gamm4")
 library(gamm4)
-m4 <- gamm4(logicalReward ~ s(I(index/100), by = as.factor(packedPollen)), random= ~ (1 | ID) + (1|colonyNum), family = binomial("logit"), data = newDF3)
+m4 <- gamm4(logicalReward ~ s(I(index/100), by = as.factor(packedPollen)), random= ~ (1 +  packedPollen | ID) + (1|colonyNum), family = binomial("logit"), data = newDF3)
 summary(m4$mer)
+plot(m4$gam, pages = 1)
+
+summary(m4$mer)
+
 summary(m4$gam)
+
+m3 <- glmer(logicalReward ~ I(index/100)*packedPollen + I((index/100)^2)*packedPollen + I((index/100)^3)*packedPollen  + (1 | ID) + (1|colonyNum), family = binomial("logit"), data = newDF3, control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=100000)))
+
+m33 <- update(m3, .~. - +I((index/100)^3):packedPollen)
+anova(m3, m33)
+
+m34 <- update(m3, .~. - I((index/100)^2):packedPollen)
+anova(m3, m34)
+
+summary(m34)
+
+m35 <- update(m34, .~. - I(index/100):packedPollen)
+anova(m35, m34) # m34 better
+
+m36 <- glmer(logicalReward ~ I(index/100)*packedPollen + I((index/100)^2) +  
+    I((index/100)^3) + (1 + packedPollen| ID) + (1 | colonyNum), family = binomial("logit"), data = newDF3, control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=100000)) )
+summary(m36)
+
+m37 <- update(m36, .~. - I((index/100)^3) )
+anova(m37, m36)
+
+m38 <- update(m37, .~.  - I((index/100)^2))
+anova(m37, m38)
+
+summary(m38)
+
+qqnorm(ranef(m38)$ID[,1])
+qqline(ranef(m38)$ID[,1])
+
+qqnorm(ranef(m38)$ID[,2])
+qqline(ranef(m38)$ID[,2])
+
+
+
+m39 <- update(m38, .~. - I(index/100):packedPollen)
+anova(m38, m39) # BIC and AIC disagree
+
+summary(m39)
+
+qqnorm(ranef(m39)$ID[,1])
+qqline(ranef(m39)$ID[,1])
+
+qqnorm(ranef(m39)$ID[,2]) #wonky
+qqline(ranef(m39)$ID[,2])
+
 
 
 
@@ -692,10 +756,13 @@ ggplot(newDF3, aes(x= index, y = logicalReward, color = packedPollen)) +
   scale_colour_viridis_d()
 
 newDat = expand.grid(index = 1:100, packedPollen = c(TRUE, FALSE))
-newDat <- newDat[(newDat$index <= max(newDF3$index[newDF3$packedPollen == FALSE])) | 
-            (newDat$packedPollen == TRUE), ]
+newDat <- newDat[(newDat$index <= max(newDF3$index[newDF3$packedPollen == FALSE])) |
+          (newDat$packedPollen == TRUE), ]
 
 preds = predict(m4$gam, newdata = newDat , 
+                type = 'link', re.form = NA, se = TRUE)
+
+preds = predict(m38, newdata = newDat , 
                 type = 'link', re.form = NA, se = TRUE)
 
 ilogit <- function(x){
@@ -711,7 +778,7 @@ pdframe <- pdframe %>%
          fit = ilogit(fit))
 
 pdframe$visitNum = pdframe$index
-pdframe$packedPollen <- mapvalues(pdframe$packedPollen, from = c(TRUE, FALSE), 
+pdframe$packedPollen <- plyr::mapvalues(pdframe$packedPollen, from = c(TRUE, FALSE), 
                                   to = c("Packed pollen", "Did not pack pollen"))
 
 
@@ -730,7 +797,7 @@ dd = rbind(with(bb,
                 expand.grid(x = 100:0, y = 0, packedPollen = FALSE))))
 dd <- dd[dd$x <= 100 & dd$x >= 0, ]
 dd$y <- dd$y / max(dd$y)
-dd$packedPollen <- mapvalues(dd$packedPollen, from = c(TRUE, FALSE), 
+dd$packedPollen <- plyr::mapvalues(dd$packedPollen, from = c(TRUE, FALSE), 
                                   to = c("Packed pollen", "Did not pack pollen"))
 
 pp = ggplot(pdframe, aes(x = visitNum , y = fit, fill = packedPollen)) + 
@@ -747,7 +814,7 @@ pp = ggplot(pdframe, aes(x = visitNum , y = fit, fill = packedPollen)) +
   #geom_point(data=newDF2, aes(x = index, y = packedPollen*0.03), pch= "|", size = 3, position = position_jitter(width = 0.5, height = 0), inherit.aes = FALSE, alpha = 1) 
 pp
   
-ggsave(file.path(figDir, "BeeChangeOverallPreds_index.pdf"), width = 7.5, height = 3)
+ggsave(file.path(figDir, "BeeChangeOverallPreds_index_randomslopes.pdf"), width = 7.5, height = 3)
  
 
 pp + 
