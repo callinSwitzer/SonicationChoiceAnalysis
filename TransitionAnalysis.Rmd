@@ -32,7 +32,7 @@ ipak <- function(pkg){
   sapply(pkg, require, character.only = TRUE)
 }
   
-packages <- c("car", "plyr", "blmeco", "markovchain", "msm", "tidyverse")
+packages <- c( "markovchain", "msm", "tidyverse")
 ipak(packages)
 
 {if(grepl(pattern = "wind", ignore.case = TRUE, x = Sys.info()[1])){
@@ -46,6 +46,8 @@ else{
   figDir= "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceFigures"
 }}
 
+
+theme_set(theme_classic() + theme(axis.text=element_text(colour="black"), text=element_text(size=12)))
 
 print(dataDir)
 ```
@@ -85,7 +87,7 @@ newDF <- newDF %>%
   ## label bees that don't pack pollen
   mutate(packedPollen = !grepl(pattern = "corbic", Notes)) %>%
   ## make short version of treatment
-  mutate(trt_group = mapvalues(treatment, 
+  mutate(trt_group = plyr::mapvalues(treatment, 
                                from = c("Dev2/ai0_True__Dev2/ai1_False", 
                                          "Dev2/ai0_True__Dev2/ai1_True", 
                                          "Dev2/ai0_False__Dev2/ai1_False", 
@@ -93,7 +95,7 @@ newDF <- newDF %>%
                                to = c("LeftReward", "DoublePositive", 
                                       "DoubleNegative", "RightReward")), 
          rewardStatus = tolower(rewardStatus), 
-         rewardStatus = mapvalues(rewardStatus, from = c("true", "false"), 
+         rewardStatus = plyr::mapvalues(rewardStatus, from = c("true", "false"), 
                                   to = c("Rewarded", "Unrewarded"))) %>%
   droplevels()
   
@@ -128,6 +130,7 @@ rewards1 = newDF %>%
   fill(packedPollen) %>%
   # keep only 1 instance of leaving
   group_by(ID, timestamp) 
+
 rewards = rewards1 %>% 
   filter(row_number(rewardStatus_L) == 1) %>%
   mutate(packedPollen = packedPollen*1)
@@ -144,22 +147,30 @@ rew2 <- rewards1 %>%
   mutate(i = 1) %>%
   spread(rewardStatus_word, i, fill = 0 ) %>%
   group_by(buzzNum, packedPollen) %>%
-  summarize(`No reward` =mean(`No reward`), 
-            `Reward` = mean(`reward`), 
+  summarize(`Unrewarded` =mean(`No reward`), 
+            `Rewarded` = mean(`reward`), 
             `Quit` = mean(`quit`)) %>%
-  gather(key = rewardStatus, value = propReward, `No reward`:`Quit`)
+  gather(key = rewardStatus, value = propReward, `Unrewarded`:`Quit`) %>%
+  mutate(packedPollen2 = recode(as.character(packedPollen), 
+                                "TRUE" = "Packed Pollen", 
+                                "FALSE" = "No Packed Pollen"), 
+         rewardStatus_2 = factor(rewardStatus, levels = c("Unrewarded", 
+                                                    "Quit", 
+                                                    "Rewarded")))
 rew2
 
 
-ggplot(rew2, aes(x = buzzNum, y = propReward, fill = rewardStatus)) + 
+ggplot(rew2, aes(x = buzzNum, y = propReward, fill = rewardStatus_2)) + 
   geom_bar(color = NA, position = 'fill', stat = "identity", alpha = 0.8, width=1) + 
-  facet_wrap(.~packedPollen, labeller = "label_both", ncol = 1) + 
-  theme_classic() + 
-  scale_fill_viridis_d(direction = -1, name = "State") + 
-   scale_color_viridis_d(direction = -1, name = "State") + 
-  labs(x = "Sonication Number", y = "Proportion")
+  facet_wrap(.~packedPollen2, ncol = 1) + 
+  scale_fill_viridis_d(direction = -1, name = "") + 
+   scale_color_viridis_d(direction = -1, name = "") + 
+  labs(x = "Sonication Number", y = "Proportion") + 
+  theme(strip.background = element_blank(), 
+        legend.title = element_blank(), 
+        legend.position = 'right') 
 
-ggsave(file.path(figDir, "sedimentPlot.png"), dpi = 500, width = 6, height = 4, units = 'in')
+ggsave(file.path(figDir, "sedimentPlot.png"), dpi = 500, width = 5.5, height = 3.5, units = 'in')
 
 ggplot(rew2, aes(x = buzzNum, y = propReward, color = rewardStatus)) + 
   geom_line(lwd = 2) + 
@@ -168,9 +179,13 @@ ggplot(rew2, aes(x = buzzNum, y = propReward, color = rewardStatus)) +
   scale_color_viridis_d(direction = -1, name = "State") + 
   labs(x = "Sonication Number", y = "Proportion")
 
-
-recode(.x = rewards$rewardStatus_L, "1" = "no reward", 
-                                   "2" = "reward", "3" = "quit")
+newDF %>% nrow
+# get sample sizes
+newDF %>%
+  group_by(packedPollen, ID) %>%
+  summarize(n = n()) %>%
+  group_by(packedPollen) %>%
+  summarize(n = n())
 
 # write csv
 #write.csv(x = newDF, file = file.path(dirname(dataDir), "combinedBeeTrials_bandit.csv"), row.names = FALSE)
@@ -243,22 +258,169 @@ qmatrix.msm(buzz_msm, covariates = list(packedPollen = 0, buzzNum = 1))
 ```{r}
 # plot transition probabilities over time
 
-aa <- qmatrix.msm(buzz_msm, covariates = list(packedPollen = 1, `I(buzzNum/100)` = 1))
+transProb = data.frame()
 
-# clean up diagnoals
-aa$estimates + matrix(c(1,0,0,
-                        0,1,0,
-                        0,0,1), nrow = 3, byrow = TRUE)
+for(ii in 1:100){
+  aa <- qmatrix.msm(buzz_msm, covariates = 
+                      list(packedPollen = 1, `I(buzzNum/100)` = ii/100))
+
+  # clean up diagnoals
+  bb = aa$estimates + matrix(c(1,0,0,
+                          0,1,0,
+                          0,0,1), nrow = 3, byrow = TRUE)
+  
+  lower = aa$L + matrix(c(1,0,0,
+                          0,1,0,
+                          0,0,1), nrow = 3, byrow = TRUE)
+  
+  upper = aa$U + matrix(c(1,0,0,
+                          0,1,0,
+                          0,0,1), nrow = 3, byrow = TRUE)
+  
+  transProb <- rbind(transProb, c(matrix(bb, nrow = 1), 1, ii, matrix(lower, nrow = 1), matrix(upper, nrow = 1)))
+}
+
+for(ii in 1:100){
+  aa <- qmatrix.msm(buzz_msm, covariates = 
+                      list(packedPollen = 0, `I(buzzNum/100)` = ii/100))
+
+  # clean up diagnoals
+  bb = aa$estimates + matrix(c(1,0,0,
+                          0,1,0,
+                          0,0,1), nrow = 3, byrow = TRUE)
+  
+  lower = aa$L + matrix(c(1,0,0,
+                          0,1,0,
+                          0,0,1), nrow = 3, byrow = TRUE)
+  
+  upper = aa$U + matrix(c(1,0,0,
+                          0,1,0,
+                          0,0,1), nrow = 3, byrow = TRUE)
+  
+  transProb <- rbind(transProb, c(matrix(bb, nrow = 1), 0, ii, matrix(lower, nrow = 1), matrix(upper, nrow = 1)))
+}
 
 
 
+colnames(transProb) <-  c("t11", "t21", "t31", "t12", "t22", "t32", "t13", "t23", "t33", "packedPollen", "buzzNum", "t11L", "t21L", "t31L", "t12L", "t22L", "t32L", "t13L", "t23L", "t33L", "t11U", "t21U", "t31U", "t12U", "t22U", "t32U", "t13U", "t23U", "t33U")
+
+
+
+transProb_long = as.tbl(transProb) %>%
+  select(t11:buzzNum) %>%
+  gather(key = transitionType, value = prob, -c(packedPollen, buzzNum))
+transProb_long
+
+transProb_long_err <- as.tbl(transProb) %>%
+  select(packedPollen:t33U) %>%
+  gather(key = transitionType_L, value = prob, -c(packedPollen, buzzNum)) %>%
+  mutate(errorType = substr(.$transitionType_L, start = 4, stop = 4), 
+         transitionType = substr(.$transitionType_L, start =1, stop = 3)) %>%
+  select(-transitionType_L) %>%
+  spread(key = errorType, value = prob, drop = TRUE) %>%
+  full_join(transProb_long) %>%
+  filter(!(transitionType %in% c("t31", "t32", "t33"))) %>%
+  mutate(packed_pollen = recode(packedPollen, 
+                                "1"="Packed Pollen", "0" = "No Packed Pollen"), 
+         tranType = recode(transitionType, 
+                           "t11" = "Unrewarding -> Unrewarding", 
+                           "t12" = "Unrewarding -> Rewarding", 
+                           "t13" = "Unrewarding -> Quit", 
+                           "t21" = "Rewarding -> Unrewarding", 
+                           "t22" = "Rewarding -> Rewarding", 
+                           "t23" = "Rewarding -> Quit"), 
+         tranType2 = recode(transitionType, 
+                           "t11" = "Unrewarding -> Unrewarding", 
+                           "t12" = "Unrewarding -> Rewarding", 
+                           "t13" = "-> Quit", 
+                           "t21" = "Rewarding -> Unrewarding", 
+                           "t22" = "Rewarding -> Rewarding", 
+                           "t23" = "-> Quit")) %>%
+  filter(!(buzzNum > 54 & packedPollen == 0)) %>%
+  mutate(transType3 = factor(tranType, 
+                            levels = 
+                              levels(as.factor(
+                                .$tranType))[c(2,3,6,1,5, 4)]))
+
+levels(as.factor(transProb_long_err$tranType))[c(2,3,6,1,5, 4)]
+
+transProb_long_err
+
+
+kk = ggplot(transProb_long_err, aes(x = buzzNum, y = prob, color =  packed_pollen, fill = packed_pollen)) +
+  geom_line(color = "black") + 
+  geom_ribbon(aes(ymin = L, ymax = U), alpha = 0.5, color = NA) + 
+  facet_wrap(~transType3) + 
+  scale_color_viridis_d(name = "") + 
+  scale_fill_viridis_d(name = "", option = 'magma',begin = 0.2, end = 0.8) + 
+  theme(legend.position = 'top') + 
+  labs(x = "Sonication Number", y = "Transition Probability") + 
+  scale_x_continuous(breaks = c(0, 50, 100)) + 
+  scale_y_continuous(breaks = c(0, 0.5,1)) + 
+  geom_hline(aes(yintercept = c(0)), lty =  3, color = 'grey40', size = 0.3) + 
+  geom_hline(aes(yintercept = c(0.5)), lty =  3, color = 'grey40', size = 0.3) + 
+  geom_hline(aes(yintercept = c(1)), lty =  3, color = 'grey40', size = 0.3)
+kk
+ggsave(file.path(figDir, "TransitionProbs.svg"), width = 8, height= 5, unit = "in")
+kk + theme(panel.spacing = unit(5, "lines"), 
+           panel.border = element_rect(colour = "black", fill=NA, size=0.3), 
+           strip.background = element_blank())
+ggsave(file.path(figDir, "TransitionProbs_spaced.svg"), width = 12, height= 7, unit = "in")
+
+
+
+ggplot(transProb, aes(x = buzzNum, y = t11)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin = t11L, ymax = t11U), alpha = 0.2)
+
+
+ggplot(transProb, aes(x = buzzNum, y = t12)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin = t12L, ymax = t12U), alpha = 0.2)
+
+ggplot(transProb, aes(x = buzzNum, y = t21)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin = t21L, ymax = t21U), alpha = 0.2)
+
+
+ggplot(transProb, aes(x = buzzNum, y = t13)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin = t13L, ymax = t13U), alpha = 0.2)
+
+ggplot(transProb, aes(x = buzzNum, y = t23)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin = t23L, ymax = t23U), alpha = 0.2)
+
+
+qplot(transProb$t11, x = transProb$buzzNum)
+qplot(transProb$t12, x = transProb$buzzNum)
+qplot(transProb$t13, x = transProb$buzzNum)
+
+
+qplot(transProb$t11, x = transProb$buzzNum)
+qplot(transProb$t22, x = transProb$buzzNum)
+
+qplot(transProb$t21, x = transProb$buzzNum)
+qplot(transProb$t12, x = transProb$buzzNum)
 
 
 ```
 
 
+# test Markovianness
+
+```{r}
+install.packages("spgs")
+library(spgs)
 
 
+cc = markov.test(rewards$rewardStatus_L)
+print(cc)
+  
+
+
+?markov.test
+```
 
 
 
