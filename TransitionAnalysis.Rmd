@@ -238,15 +238,15 @@ buzz_msm # best model
 
 buzz_msm
 
-buzz_msm <- msm(rewardStatus_L ~ buzzNum, subject = ID, data = rewards[rewards$packedPollen == 1,], qmatrix = Q.crude, exacttimes = TRUE)
-
-buzz_msm <- msm(rewardStatus_L ~ buzzNum, subject = ID, data = rewards[rewards$packedPollen == 0,], qmatrix = Q.crude, exacttimes = TRUE)
-
-buzz_msm
+# buzz_msm <- msm(rewardStatus_L ~ buzzNum, subject = ID, data = rewards[rewards$packedPollen == 1,], qmatrix = Q.crude, exacttimes = TRUE)
+# 
+# buzz_msm <- msm(rewardStatus_L ~ buzzNum, subject = ID, data = rewards[rewards$packedPollen == 0,], qmatrix = Q.crude, exacttimes = TRUE)
+# 
+# buzz_msm
 
 # look at two group transition matrices
 qmatrix.msm(buzz_msm, covariates = list(packedPollen = 1, `I(buzzNum/100)` = 1))
-qmatrix.msm(buzz_msm, covariates = list(packedPollen = 0, buzzNum = 1))
+qmatrix.msm(buzz_msm, covariates = list(packedPollen = 0, `I(buzzNum/100)` = 1))
 
 ```
 
@@ -369,40 +369,23 @@ ggsave(file.path(figDir, "TransitionProbs_spaced.svg"), width = 12, height= 7, u
 
 
 
-ggplot(transProb, aes(x = buzzNum, y = t11)) + 
-  geom_line() + 
-  geom_ribbon(aes(ymin = t11L, ymax = t11U), alpha = 0.2)
 
 
-ggplot(transProb, aes(x = buzzNum, y = t12)) + 
-  geom_line() + 
-  geom_ribbon(aes(ymin = t12L, ymax = t12U), alpha = 0.2)
-
-ggplot(transProb, aes(x = buzzNum, y = t21)) + 
-  geom_line() + 
-  geom_ribbon(aes(ymin = t21L, ymax = t21U), alpha = 0.2)
+# get some numbers for abstract
+transProb_long_err %>%
+  filter(packedPollen == 1, buzzNum ==1 |buzzNum == 100, transitionType == "t12")
 
 
-ggplot(transProb, aes(x = buzzNum, y = t13)) + 
-  geom_line() + 
-  geom_ribbon(aes(ymin = t13L, ymax = t13U), alpha = 0.2)
-
-ggplot(transProb, aes(x = buzzNum, y = t23)) + 
-  geom_line() + 
-  geom_ribbon(aes(ymin = t23L, ymax = t23U), alpha = 0.2)
+transProb_long_err %>%
+  filter(packedPollen == 1, buzzNum ==1 |buzzNum == 100, transitionType == "t11")
 
 
-qplot(transProb$t11, x = transProb$buzzNum)
-qplot(transProb$t12, x = transProb$buzzNum)
-qplot(transProb$t13, x = transProb$buzzNum)
+transProb_long_err %>%
+  filter(packedPollen == 1, buzzNum ==1 |buzzNum == 100, transitionType == "t22")
 
 
-qplot(transProb$t11, x = transProb$buzzNum)
-qplot(transProb$t22, x = transProb$buzzNum)
-
-qplot(transProb$t21, x = transProb$buzzNum)
-qplot(transProb$t12, x = transProb$buzzNum)
-
+transProb_long_err %>%
+  filter(packedPollen == 1, buzzNum ==1 |buzzNum == 100, transitionType == "t21")
 
 ```
 
