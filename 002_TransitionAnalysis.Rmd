@@ -5,25 +5,35 @@ editor_options:
   chunk_output_type: console
 ---
 
+<pre>
+Analyze transition data for bee flower choice experiments
+</pre>
 
+## Set knitr options
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
-# define data and figure directories
+# define project directory
 windows = ifelse(grepl(pattern = "wind", ignore.case = TRUE, 
                        x = Sys.info()[1]), TRUE, FALSE)
   
-{if(windows){
-  rd = "D:/Dropbox/SonicationBehavior"
+{if(grepl(pattern = "wind", ignore.case = TRUE, x = Sys.info()[1])){
+  # windows
+  baseDir = "D:/Dropbox/AcademiaDropbox/UW/BeeDecisionProject"
 }
 else{
-  rd = "/Users/cswitzer/Dropbox/SonicationBehavior"
+  # mac
+  baseDir = "/Users/cswitzer/Dropbox/AcademiaDropbox/UW/BeeDecisionProject"
 }}
 
-knitr::opts_knit$set(root.dir =rd )
+if(!dir.exists(baseDir)) stop("Directory does not exist")
+
+knitr::opts_knit$set(root.dir = baseDir )
 ```
 
+
+## load packages and set directories
 
 ```{r}
 ipak <- function(pkg){
@@ -32,90 +42,45 @@ ipak <- function(pkg){
   sapply(pkg, require, character.only = TRUE)
 }
   
-packages <- c( "markovchain", "msm", "tidyverse")
+packages <- c("lme4", "car","blmeco", "markovchain", "tidyverse")
 ipak(packages)
 
-{if(grepl(pattern = "wind", ignore.case = TRUE, x = Sys.info()[1])){
-  # windows
-  dataDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceData/"
-  figDir = "D:/Dropbox/UW/ExperWinter2018/BeeTwoFLowerChoiceFigures/"
+# set ggplot theme
+theme_set(theme_classic() + theme(text = element_text(size=12, color = "black")) )
+
+# set directoies
+dataDir = file.path(baseDir, "RawData")
+dataOut = file.path(baseDir, "DataOutput")
+figDir= file.path(baseDir, "Media")
+
+
+# check to make sure directory exists
+for(ii in c(dataDir, dataOut, figDir)){
+  if(!dir.exists(ii)) stop("Directory does not exist")
 }
-else{
-  # mac
-  dataDir = "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceData"
-  figDir= "/Users/cswitzer/Dropbox/UW/ExperWinter2018/BeeTwoFlowerChoiceFigures"
-}}
-
-
-theme_set(theme_classic() + theme(axis.text=element_text(colour="black"), text=element_text(size=12)))
 
 print(dataDir)
 ```
 
 
 
-
-
+## Load data
 
 ```{r}
-# load in data
-csvList =  list.files(dataDir)
+# find newest version of dataset
+newestDataset <- sort(dir(dataOut)[grepl("combinedTrials",dir(dataOut))], 
+                      decreasing = TRUE)[1]
 
 
-for (ii in csvList){
-   tmp = read_csv(file.path(dataDir, ii), col_types = cols())
-   tmp$ID = ii
-   if(ii == csvList[1]) newDF = tmp
-   else newDF = rbind(tmp, newDF)
-}  
-
-unique(newDF$Notes)
-
-# clean data
-newDF <- newDF %>% 
-  # fix one data point that I forgot to label as not packing
-  mutate(Notes = ifelse(grepl(x = .$Notes,
-                               pattern = 
-                     "Accelerometers were getting some inaccurate data"), 
-                         yes = paste0(.$Notes, 
-                                     " Did not pack pollen in coricula"), 
-                         no = .$Notes )) %>%
-  # replace NA's with ""
-  mutate(Notes = ifelse(is.na(.$Notes), "", .$Notes )) %>%
-  mutate(Notes = tolower(Notes)) %>% # make lowercase
-  filter(!grepl("disc", Notes)) %>% # remove trials labeled as discard
-  ## label bees that don't pack pollen
-  mutate(packedPollen = !grepl(pattern = "corbic", Notes)) %>%
-  ## make short version of treatment
-  mutate(trt_group = plyr::mapvalues(treatment, 
-                               from = c("Dev2/ai0_True__Dev2/ai1_False", 
-                                         "Dev2/ai0_True__Dev2/ai1_True", 
-                                         "Dev2/ai0_False__Dev2/ai1_False", 
-                                         "Dev2/ai0_False__Dev2/ai1_True"), 
-                               to = c("LeftReward", "DoublePositive", 
-                                      "DoubleNegative", "RightReward")), 
-         rewardStatus = tolower(rewardStatus), 
-         rewardStatus = plyr::mapvalues(rewardStatus, from = c("true", "false"), 
-                                  to = c("Rewarded", "Unrewarded"))) %>%
-  droplevels()
-  
-
- 
-  
-str(newDF)
-
-# Check levels
-unique(newDF$Notes)
-unique(newDF$Notes[newDF$packedPollen])
-unique(newDF$colonyNum)
-
-unique(newDF$rewardStatus)
+# read csv
+newDF <- read_csv(file = file.path(dataOut, newestDataset))
+newDF
+```
 
 
-newDF <- droplevels(newDF)
+## restructure data for transition analysis
 
-
-
+```{r}
 rewards1 = newDF %>%
   mutate(rewardStatus_L = (rewardStatus == "Rewarded")*1 + 1) %>%
   filter(trt_group == "LeftReward" | trt_group == "RightReward") %>%
@@ -142,12 +107,12 @@ rewards
 # plot proportion in each state with ggplot
 rew2 <- rewards1 %>%
   ungroup() %>%
-  mutate(rewardStatus_word = recode(.$rewardStatus_L, "1" = "No reward", 
+  mutate(rewardStatus_word = recode(rewardStatus_L, "1" = "No reward", 
                                    "2" = "reward", "3" = "quit"))%>%
   mutate(i = 1) %>%
   spread(rewardStatus_word, i, fill = 0 ) %>%
   group_by(buzzNum, packedPollen) %>%
-  summarize(`Unrewarded` =mean(`No reward`), 
+  summarize(`Unrewarded` = mean(`No reward`), 
             `Rewarded` = mean(`reward`), 
             `Quit` = mean(`quit`)) %>%
   gather(key = rewardStatus, value = propReward, `Unrewarded`:`Quit`) %>%
@@ -156,21 +121,55 @@ rew2 <- rewards1 %>%
                                 "FALSE" = "No Packed Pollen"), 
          rewardStatus_2 = factor(rewardStatus, levels = c("Unrewarded", 
                                                     "Quit", 
-                                                    "Rewarded")))
+                                                    "Rewarded"))) %>%
+  mutate(rewardStatus_3 = recode_factor(rewardStatus_2, 
+                                        "Unrewarded" = "Unrewarded           ", 
+                                          "Quit" = "Quit           ", 
+                                          "Rewarded" = "Rewarded           "))
 rew2
 
+fontsize = 10
 
-ggplot(rew2, aes(x = buzzNum, y = propReward, fill = rewardStatus_2)) + 
-  geom_bar(color = NA, position = 'fill', stat = "identity", alpha = 0.8, width=1) + 
+
+sedPlot <- ggplot(rew2, aes(x = buzzNum, y = propReward, fill = rewardStatus_3)) + 
+  geom_bar(color = NA, 
+           position = 'fill', stat = "identity", alpha = 0.9, width=1) + 
   facet_wrap(.~packedPollen2, ncol = 1) + 
-  scale_fill_viridis_d(direction = -1, name = "") + 
-   scale_color_viridis_d(direction = -1, name = "") + 
+  scale_fill_viridis_d(direction = -1, name = "", option = "cividis") + 
+   scale_color_viridis_d(direction = -1, name = "", option = "cividis", alpha = 0.4) + 
   labs(x = "Sonication Number", y = "Proportion") + 
-  theme(strip.background = element_blank(), 
+  theme_bw() +
+  theme(strip.background = element_rect(color = "black", size = 0.5, fill = "transparent"), 
+        strip.text = element_text(size = fontsize, color = "black"),
         legend.title = element_blank(), 
-        legend.position = 'right') 
+        legend.position = c(0.6, 1.2), 
+        legend.background = element_rect(color = NA, fill = NA),
+        legend.direction = "horizontal",
+        plot.margin = unit(c(1.1,0.5,0.1,0.1), "cm"), 
+        panel.grid = element_blank(), 
+        axis.line.y.right = element_blank(), 
+        axis.line.x.top = element_blank(), 
+        axis.ticks = element_line(size = 0.3, color = 'black'), 
+        text = element_text(size=fontsize, color = "black"), 
+        axis.text = element_text(size=fontsize, color = "black"), 
+        axis.title = element_text(size = fontsize, color = 'black'), 
+        legend.text = element_text(size = fontsize), 
+        panel.border = element_rect(color = "black"), 
+        plot.background = element_rect(fill = "transparent", color = NA)) + 
+  scale_x_continuous(limits=c(0, 100), breaks = c(0, 50, 100), expand = c(0, 0)) + 
+  scale_y_continuous(limits = c(0, 1), breaks = c(0, 0.5, 1), expand = c(0,0))
 
-ggsave(file.path(figDir, "sedimentPlot.png"), dpi = 500, width = 5.5, height = 3.5, units = 'in')
+sedPlot
+
+
+{ggsave(file.path(figDir, "sedimentPlot.png"), 
+        dpi = 500, width = 6, height = 3.5, units = 'in', bg = "transparent")
+svg(file.path(figDir, "sedimentPlot.svg"), width = 6, height = 3.5)
+sedPlot
+dev.off()}
+
+
+
 
 ggplot(rew2, aes(x = buzzNum, y = propReward, color = rewardStatus)) + 
   geom_line(lwd = 2) + 

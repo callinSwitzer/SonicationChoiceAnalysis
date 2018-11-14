@@ -1,0 +1,116 @@
+---
+title: "001_CreateDataset"
+author: "Callin Switzer"
+date: "November 13, 2018"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+## Create CSV file that merges all trials together
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# define project directory
+windows = ifelse(grepl(pattern = "wind", ignore.case = TRUE, 
+                       x = Sys.info()[1]), TRUE, FALSE)
+  
+{if(grepl(pattern = "wind", ignore.case = TRUE, x = Sys.info()[1])){
+  # windows
+  baseDir = "D:/Dropbox/AcademiaDropbox/UW/BeeDecisionProject"
+}
+else{
+  # mac
+  baseDir = "/Users/cswitzer/Dropbox/AcademiaDropbox/UW/BeeDecisionProject"
+}}
+
+if(!dir.exists(baseDir)) stop("Directory does not exist")
+
+knitr::opts_knit$set(root.dir = baseDir )
+```
+
+
+
+
+```{r}
+library("tidyverse")
+# set directoies
+dataDir = file.path(baseDir, "RawData")
+dataOut = file.path(baseDir, "DataOutput")
+
+
+# check to make sure directory exists
+for(ii in c(dataDir, dataOut)){
+  if(!dir.exists(ii)) stop("Directory does not exist")
+}
+
+print(dataDir)
+
+```
+
+## Clean and save data in a single CSV file
+
+```{r cars}
+# load in data
+csvList =  list.files(dataDir)
+
+
+for (ii in csvList){
+   tmp = read_csv(file.path(dataDir, ii), col_types = cols())
+   tmp$ID = ii
+   if(ii == csvList[1]) newDF = tmp
+   else newDF = rbind(tmp, newDF)
+}  
+
+unique(newDF$Notes)
+
+# clean data
+newDF <- newDF %>% 
+  # fix one data point that I forgot to label as not packing
+  mutate(Notes = ifelse(grepl(x = .$Notes,
+                               pattern = 
+                     "Accelerometers were getting some inaccurate data"), 
+                         yes = paste0(.$Notes, 
+                                     " Did not pack pollen in coricula"), 
+                         no = .$Notes )) %>%
+  # replace NA's with ""
+  mutate(Notes = ifelse(is.na(.$Notes), "", .$Notes )) %>%
+  mutate(Notes = tolower(Notes)) %>% # make lowercase
+  filter(!grepl("disc", Notes)) %>% # remove trials labeled as discard
+  
+  ## label bees that don't pack pollen
+  mutate(packedPollen = !grepl(pattern = "corbic", Notes)) %>%
+  
+  ## make short version of treatment
+  mutate(trt_group = plyr::mapvalues(treatment, 
+                               from = c("Dev2/ai0_True__Dev2/ai1_False", 
+                                         "Dev2/ai0_True__Dev2/ai1_True", 
+                                         "Dev2/ai0_False__Dev2/ai1_False", 
+                                         "Dev2/ai0_False__Dev2/ai1_True"), 
+                               to = c("LeftReward", "DoublePositive", 
+                                      "DoubleNegative", "RightReward")), 
+         rewardStatus = tolower(rewardStatus), 
+         rewardStatus = plyr::mapvalues(rewardStatus, from = c("true", "false"), 
+                                  to = c("Rewarded", "Unrewarded"))) %>%
+  droplevels()
+
+
+# Check levels
+unique(newDF$Notes)
+unique(newDF$Notes[newDF$packedPollen])
+unique(newDF$colonyNum)
+unique(newDF$rewardStatus)
+
+newDF <- droplevels(newDF)
+
+st=format(Sys.time(), "%Y_%m_%d__%H_%M_%S")
+
+# write csv
+write.csv(x = newDF, file = file.path(dataOut, 
+                                      paste0("combinedTrials_", 
+                                             st, 
+                                             ".csv")), 
+                                      row.names = FALSE)
+```
