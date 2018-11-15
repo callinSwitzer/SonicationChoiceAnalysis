@@ -74,33 +74,84 @@ newestDataset <- sort(dir(dataOut)[grepl("combinedTrials",dir(dataOut))],
 
 # read csv
 newDF <- read_csv(file = file.path(dataOut, newestDataset))
-newDF
+newDF$trt_group
 ```
 
 
 
 
 ```{r}
-ggplot(data=newDF,aes(x=ID,fill=rewardStatus)) + 
-  geom_bar(data=subset(newDF,rewardStatus=="Rewarded"),color = 'grey10', lwd = 0.1) +
-  #scale_color_grey(guide = FALSE, start = 1, end = 0) + 
-  geom_bar(data=subset(newDF,rewardStatus=="Unrewarded"),aes( y=..count..*(-1)), color = 'grey10', lwd = 0.1) + 
-  scale_y_continuous(breaks=seq(-100,100,10),labels=abs(seq(-100,100,10))) + 
-  #coord_flip() + 
-  theme_classic() + 
+
+# add index
+newDF2 <- newDF %>%
+  group_by(ID) %>%
+  arrange(timestamp)%>%
+  mutate(index = row_number())%>%
+  ungroup() %>% 
+  mutate(logicalReward = recode(.$rewardStatus, 
+                                "Unrewarded" = FALSE, 
+                                "Rewarded" = TRUE)) %>%
+  filter(index <= 100, 
+         trt_group != "DoublePositive", 
+         trt_group != "DoubleNegative")
+
+
+
+# make new labels for beeID
+for(ii in 1:nrow(newDF2)){
+  newDF2$propIndex[ii] = newDF2$index[ii] / sum(newDF2$ID == newDF2$ID[ii])
+}
+
+newDF2$Reward_Long = plyr::mapvalues(newDF2$logicalReward, from = c(1, 0), 
+                                  to = c("Reward", "No Reward"))
+
+nrow(newDF2)
+
+length(unique(newDF2$ID))
+
+
+
+df1 <- as.data.frame(xtabs(~substr(newDF2$ID, 7, 17)))
+names(df1)[1] <- "BeeID"
+df1 <- df1[order(df1$Freq, decreasing = TRUE), ]
+df1$shortID = (formatC(1:nrow(df1) + 100, width = 3, flag = "0"))
+newDF2$ID_short = substr(newDF2$ID, start = 7, stop = 17)
+newDF2$ID_veryShort = factor(plyr::mapvalues(newDF2$ID_short,
+                                             from = as.character(df1$BeeID), 
+                                             to = df1$shortID), 
+                             levels = df1$shortID)
+
+
+df1$packedPollen = df1$BeeID %in% newDF2$ID_short[newDF2$packedPollen]
+
+ggplot(data=newDF2,aes(x=ID_veryShort,fill=Reward_Long)) + 
+  geom_bar(data=subset(newDF2,Reward_Long=="Reward"),
+           color = 'grey10', lwd = 0.1) +
+  geom_bar(data=subset(newDF2,Reward_Long=="No Reward"),
+           aes( y=..count..*(-1)), color = 'grey10', lwd = 0.1) + 
+  scale_y_continuous(breaks=seq(-100,100,10),
+                     labels=abs(seq(-100,100,10)), 
+                     limits = c(-100, 100)) + 
   theme(legend.position = c(0.6,0.8) , 
         axis.text.x = element_text(angle = 90, size = 7), 
-        legend.direction = "horizontal")+ 
-  scale_fill_viridis_d(direction = 1, option = "cividis", name = "", end = 0.9, begin = 0.3) + 
+        legend.direction = "horizontal", 
+        plot.background = element_rect(fill = NA, color = NA), 
+        panel.background = element_rect(fill = NA, color = NA))+ 
+  scale_fill_viridis_d(direction = 1, option = "cividis", 
+                       name = "", end = 0.9, begin = 0.2) + 
   xlab("Bee ID") + 
-  ylab("Number of visits")
-#   geom_point(data = df1[!df1$packedPollen, ], aes(x = shortID, y = -80), inherit.aes = FALSE, pch = "*", size = 7) + 
-#   annotate("text", x = 73, y = -70, label = "    Did not collect pollen in corbicula", size = 4) + 
-# annotate("text", x = 73, y = -72, label = "*                           ", size = 8) 
-# geom_point(data = newDF2, inherit.aes = FALSE, aes(x = ID_veryShort,  y = -88, color = factor(colonyNum)),
-#             lwd = 4, pch = 15)+ 
-#   scale_color_viridis_d(direction = 1, option = "plasma", end = 0.9, begin = 0.3, name = "Colony")
-ggsave(file.path(figDir, "BeePopulationPyramid.pdf"), width = 10, height = 4)
+  ylab("Number of visits") + 
+  geom_point(data = df1[!df1$packedPollen, ], 
+             aes(x = shortID, y = -80), 
+             inherit.aes = FALSE, pch = "*", size = 7) + 
+  annotate("text", x = 53, y = -70, 
+           label = "    Did not collect pollen in corbicula",
+           size = 4) + 
+  annotate("text", x = 53, y = -72, 
+           label = "*                           ", 
+           size = 8)
+
+ggsave(file.path(figDir, "BeePopulationPyramid.png"), width = 10, height = 4, bg = "transparent")
 
 ```
 
@@ -160,9 +211,9 @@ fontsize = 10
 
 sedPlot <- ggplot(rew2, aes(x = buzzNum, y = propReward, fill = rewardStatus_3)) + 
   geom_bar(color = NA, 
-           position = 'fill', stat = "identity", alpha = 0.9, width=1) + 
+           position = 'fill', stat = "identity", alpha = 1, width=1) + 
   facet_wrap(.~packedPollen2, ncol = 1) + 
-  scale_fill_viridis_d(direction = 1, name = "", option = "cividis") + 
+  scale_fill_viridis_d(direction = 1, name = "", option = "cividis", end = 0.9) + 
    scale_color_viridis_d(direction = 1, name = "", option = "cividis", alpha = 0.4) + 
   labs(x = "Sonication Number", y = "Proportion") + 
   theme_bw() +
