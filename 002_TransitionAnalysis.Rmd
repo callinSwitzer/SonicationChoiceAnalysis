@@ -424,12 +424,13 @@ kk = ggplot(transProb_long_err, aes(x = buzzNum, y = prob, color =  packed_polle
   theme(legend.position = 'top') + 
   guides(fill = guide_legend(override.aes = list(alpha = 0.7)), 
          color = guide_legend(override.aes = list(alpha = 0))) + 
-  labs(x = "Sonication Number", y = "Transition Probability") + 
+  labs(x = "Buzz Number", y = "Transition Probability") + 
   scale_x_continuous(breaks = c(0, 50, 100)) + 
   scale_y_continuous(breaks = c(0, 0.5,1)) + 
-  geom_hline(aes(yintercept = c(0)), lty =  3, color = 'grey40', size = 0.3) + 
-  geom_hline(aes(yintercept = c(0.5)), lty =  3, color = 'grey40', size = 0.3) + 
-  geom_hline(aes(yintercept = c(1)), lty =  3, color = 'grey40', size = 0.3)
+  geom_hline(aes(yintercept = c(0)), lty =  2, color = 'grey40', size = .6) + 
+  geom_hline(aes(yintercept = c(0.5)), lty =  2, color = 'grey40', size = .6) + 
+  geom_hline(aes(yintercept = c(1)), lty =  2, color = 'grey40', size = 0.6)
+
 kk
 
 
@@ -457,12 +458,12 @@ oneGroup = ggplot(data = transProb_long_err[transProb_long_err$packedPollen == 1
                        direction = -1) + 
   theme(legend.position = 'top') + 
   guides(fill = guide_legend(override.aes = list(alpha = 1))) + 
-  labs(x = "Sonication Number", y = "Transition Probability") + 
+  labs(x = "Buzz Number", y = "Transition Probability") + 
   scale_x_continuous(breaks = c(0, 50, 100)) + 
   scale_y_continuous(breaks = c(0, 0.5,1)) + 
-  geom_hline(aes(yintercept = c(0)), lty =  3, color = 'grey40', size = 0.3) + 
-  geom_hline(aes(yintercept = c(0.5)), lty =  3, color = 'grey40', size = 0.3) + 
-  geom_hline(aes(yintercept = c(1)), lty =  3, color = 'grey40', size = 0.3)
+  geom_hline(aes(yintercept = c(0)), lty =  2, color = 'grey40', size = .6) + 
+  geom_hline(aes(yintercept = c(0.5)), lty =  2, color = 'grey40', size = .6) + 
+  geom_hline(aes(yintercept = c(1)), lty =  2, color = 'grey40', size = 0.6)
 oneGroup
 
 

@@ -442,7 +442,7 @@ ggsave(file.path(figDir, "BeeChangeOverTime_notScaled.pdf"), width = 13, height 
 set.seed(122)
 samp = sample(unique(newDF2$ID), 6, replace = FALSE)
 ggplot(newDF2[newDF2$ID %in% samp, ], aes(x = index, y = logicalReward)) + 
-  geom_point(position = position_jitter(height = 0.02), size = 2, alpha = 0.7) +
+  geom_point(position = position_jitter(height = 0.02), size = 2, alpha = 0.7, stroke = 0) +
   #binomial_smooth(se = FALSE)+  
   geom_line(alpha = 0.2) + 
   facet_wrap(~ID_short) + 
@@ -451,13 +451,17 @@ ggplot(newDF2[newDF2$ID %in% samp, ], aes(x = index, y = logicalReward)) +
   ylab("")+
   theme(
   strip.background = element_blank(),
-  
+  strip.text.x = element_blank(),
+  axis.text = element_text(size = 16),
+  text = element_text(size = 16),
+  panel.spacing = unit(2, "lines"),
   panel.border = element_rect(colour = "black", fill=NA, size=0.7)
   ) + 
   scale_y_continuous(breaks = c(0,1), labels = c("No Reward", "Reward")) + 
   scale_x_continuous(breaks = c(0, 50, 100))
 
 ggsave(file.path(figDir, "BeeChangeOverTime_notScaled_small.pdf"), width = 8, height = 4)
+ggsave(file.path(figDir, "BeeChangeOverTime_notScaled_small.png"), dpi = 500, width = 12.9, height = 4.5)
 
 
 # look at timeseries for bees that did not pack pollen
@@ -471,12 +475,14 @@ ggplot(newDF2[newDF2$packedPollen == FALSE & newDF2$ID_short %in% newDF2$ID_shor
   ylab("")+
   theme(
   strip.background = element_blank(),
-  
+  strip.text.x = element_blank(),
+  axis.text = element_text(size = 16),
+  text = element_text(size = 16),
   panel.border = element_rect(colour = "black", fill=NA, size=0.7)
   ) + 
   scale_y_continuous(breaks = c(0,1), labels = c("No Reward", "Reward")) + 
   scale_x_continuous(breaks = seq(0, 50, 10)) 
-ggsave(file.path(figDir, "BeeChangeOverTime_NoPollenPack_GreaterThan30.pdf"), width = 13, height = 8)
+ggsave(file.path(figDir, "BeeChangeOverTime_NoPollenPack_GreaterThan30.tiff"), dpi = 500, width = 12, height = 4)
 
 library(zoo)
 
