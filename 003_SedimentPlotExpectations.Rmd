@@ -1,0 +1,80 @@
+---
+title: "Plot Sediment plot expectations"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+
+<pre>
+Simulate sediment expectations
+</pre>
+
+## Set knitr options
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# define project directory
+windows = ifelse(grepl(pattern = "wind", ignore.case = TRUE, 
+                       x = Sys.info()[1]), TRUE, FALSE)
+  
+{if(grepl(pattern = "wind", ignore.case = TRUE, x = Sys.info()[1])){
+  # windows
+  baseDir = "D:/Dropbox/AcademiaDropbox/UW/BeeDecisionProject"
+}
+else{
+  # mac
+  baseDir = "/Users/cswitzer/Dropbox/AcademiaDropbox/UW/BeeDecisionProject"
+}}
+
+if(!dir.exists(baseDir)) stop("Directory does not exist")
+
+knitr::opts_knit$set(root.dir = baseDir )
+```
+
+
+## load packages and set directories
+
+```{r}
+ipak <- function(pkg){
+  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+  if(length(new.pkg)) install.packages(new.pkg, dependencies = TRUE)
+  sapply(pkg, require, character.only = TRUE)
+}
+  
+packages <- c("lme4", "car","blmeco", "markovchain", "tidyverse", "msm")
+ipak(packages)
+
+# set ggplot theme
+theme_set(theme_classic() + theme(text = element_text(size=12, color = "black")) )
+
+# set directoies
+dataDir = file.path(baseDir, "RawData")
+dataOut = file.path(baseDir, "DataOutput")
+figDir= file.path(baseDir, "Media")
+
+
+# check to make sure directory exists
+for(ii in c(dataDir, dataOut, figDir)){
+  if(!dir.exists(ii)) stop("Directory does not exist")
+}
+
+print(dataDir)
+```
+
+
+
+## Simulate data
+
+```{r}
+
+beeNum = 1
+
+bee
+
+
+
+```
+
+
+
