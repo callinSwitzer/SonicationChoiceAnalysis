@@ -215,7 +215,7 @@ sedPlot <- ggplot(rew2, aes(x = buzzNum, y = propReward, fill = rewardStatus_3))
   facet_wrap(.~packedPollen2, ncol = 1) + 
   scale_fill_viridis_d(direction = 1, name = "", option = "cividis", end = 0.9) + 
    scale_color_viridis_d(direction = 1, name = "", option = "cividis", alpha = 0.4) + 
-  labs(x = "Sonication Number", y = "Proportion") + 
+  labs(x = "Buzz Number", y = "Proportion") + 
   theme_bw() +
   theme(strip.background = element_rect(color = "black", size = 0.5, fill = "transparent"), 
         strip.text = element_text(size = fontsize, color = "black"),
